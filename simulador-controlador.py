@@ -1,10 +1,9 @@
 """
 Nombre: simulador-controlador.py
 Autor: Oscar Franco
-Versión: 6.1 (2023-09-08)
+Versión: 6.2 (2024-08-06)
 Descripción: Aplicación para simular el comportamiento de un sistema según su función de transferencia
             en lazo abierto o al aplicar un controlador PID
-
 """
 
 from customtkinter import *
@@ -109,14 +108,6 @@ def fopdt(y,t,co):
 
     return dydt
 
-def restaurar_parametros_sistema():
-    entradaKp.delete(0,"end")
-    entradaKp.insert(0, str(Kp))
-    entradaTaup.delete(0,"end")
-    entradaTaup.insert(0, str(taup))
-    entradaTd.delete(0,"end")
-    entradaTd.insert(0, str(td))
-
 # arranca la simulación
 def iniciar_simulacion():
     global estadoSimulacion
@@ -163,7 +154,6 @@ def reiniciar_simulacion():
         twax.set_ylim(round(np.amin(co))-1, round(np.amax(co))+1)
     else:
         twax.set_ylim(round(np.amin(co))*.95, round(np.amax(co))*1.05)
-    
 
 # actualiza el valor de Kp desde el campo de entrada
 def actualizar_kp(event=None):
@@ -370,8 +360,8 @@ def  exportar_datos():
     nombreArchivo = f'data_{ahora}'.replace(':','_')
 
     datos = {
-        't [s]': t,
-        'CO [%]': co,
+        't': t,
+        'CO': co,
         'y': y,
         'ysp': ysp
     }
@@ -417,7 +407,7 @@ if __name__ == '__main__':
 
     ############## GRÁFICA DE TENDENCIA
 
-    fig, ax = plt.subplots(figsize=(8,5),facecolor='grey') # creación de figura
+    fig, ax = plt.subplots(facecolor='grey') # creación de figura
     plt.title("Gráfica de Tendencia",color='black',size=16, family="Arial") # asigna el título de la gráfica
 
     ax.set_facecolor('black') # asignación del fondo de la gráfica
@@ -446,19 +436,22 @@ if __name__ == '__main__':
     set_default_color_theme("blue")  # Themes: blue (default), dark-blue, green
 
     ventana = CTk()
+    ventana.geometry("950x430+0+0")  # Cambia a las dimensiones deseadas
+    ventana.minsize(950,430)
+
     ventana.title('Simulador de Lazos de Control by OF')
-    ventana.resizable(height=0, width=0)
+    # ventana.resizable(height=0, width=0)
     ventana.protocol('WM_DELETE_WINDOW', finalizar_aplicacion)
 
     # frame de gráfica
     frameGrafico = CTkFrame(ventana)
-    frameGrafico.grid(column=0,row=0, columnspan=4)
+    frameGrafico.pack(side="left", expand=True, fill='both')
     canvas = FigureCanvasTkAgg(fig, master = frameGrafico)
-    canvas.get_tk_widget().grid(column=0, row=0, padx=5, pady =5, sticky='nw')
+    canvas.get_tk_widget().pack(expand=True, padx=10, pady =10, fill='both')
 
     # frame de comandos con tabs de opciones
     frameComandos = CTkFrame(ventana)
-    frameComandos.grid(column=4,row=0)
+    frameComandos.pack(side="right", fill='y')
     tabview = CTkTabview(frameComandos)
     tabview.grid(row=0, column=0, columnspan=3, sticky='n')
     tabview.add("Simulación")

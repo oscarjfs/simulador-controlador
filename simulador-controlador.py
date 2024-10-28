@@ -1,7 +1,7 @@
 """
 Nombre: simulador_controlador.py
 Autor: Oscar Franco
-Versión: 7 (2024-09-17)
+Versión: 8 (2024-10-16)
 Descripción: Aplicación para simular el comportamiento de un sistema según su función de transferencia
             en lazo abierto o aplicando un controlador PID.
 """
@@ -14,8 +14,9 @@ from tkinter.messagebox import showerror, askyesno
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.ticker import AutoMinorLocator, MultipleLocator
-from scipy.integrate import odeint, solve_ivp
+from scipy.integrate import solve_ivp
 from pandas import DataFrame
+from PIDController import PIDController
 
 # Clase para la simulación del controlador PID
 class SimuladorControlador:
@@ -40,25 +41,23 @@ class SimuladorControlador:
     # Crear configuración por defecto si no existe
     def crear_configuracion_default(self):
         config_default = {
-            "mean": 1.0,
             "variance": 5e-09,
             "tVel": 50,
             "ruidoSenalEncendido": True,
             "Ts": 0.1,
             "controlAutomaticoEncendido": True,
             "tminGrafica": 120,
-            "estadoSimulacion": True,
             "Kp": 4.59,
             "taup": 15.14,
             "td": 5.0,
-            "Kc": 0.6058,
-            "Ki": 0.0606,
+            "Kc": 1.0,
+            "Ki": 0.0,
             "Kd": 0.0,
-            "t0": 0,
             "y0": 50,
             "co0": 50,
-            "u0": 0,
-            "ysp0": 50
+            "ysp0": 50,
+            "CO_MIN": 0,
+            "CO_MAX": 100
         }
         with open(self.CONFIG_FILE, 'w') as file:
             json.dump(config_default, file, indent=4)
@@ -66,7 +65,6 @@ class SimuladorControlador:
     # Inicialización de parámetros de simulación desde la configuración
     def inicializar_parametros(self):
         config = self.configuracion
-        self.mean = config['mean']
         self.variance = config['variance']
         self.tVel = config['tVel']
         self.Ts = config['Ts']
@@ -79,28 +77,28 @@ class SimuladorControlador:
         self.Ki = config['Ki']
         self.Kd = config['Kd']
         self.cambiosParametros=False
+        self.CO_MIN = config['CO_MIN']
+        self.CO_MAX = config['CO_MAX']
+
+        self.controller = PIDController(self.Ts, self.Kc, self.Ki, self.Kd, self.CO_MIN, self.CO_MAX)
+        self.controller.set_controller_status(self.controlAutomaticoEncendido)
 
     # Inicializar variables de estado
     def inicializar_estado_simulacion(self):
         self.tstep = 0
-        self.tActual = self.configuracion['t0']
+        self.tActual = 0
         self.yActual = self.configuracion['y0']
         self.coActual = self.configuracion['co0']
         self.yspActual = self.configuracion['ysp0']
-        self.estadoSimulacion = self.configuracion['estadoSimulacion']
+        self.estadoSimulacion = False
         self.ruidoSenalEncendido = self.configuracion['ruidoSenalEncendido']
 
-        self.t0 = self.configuracion['t0']
-        self.y0 = self.configuracion['y0']
-        self.co0 = self.configuracion['co0']
-        self.u0 = self.configuracion['u0']
-        self.ysp0 = self.configuracion['ysp0']
+        self.t0 = self.tActual
+        self.y0 = self.yActual
+        self.co0 = self.coActual
+        self.ysp0 = self.yspActual
 
-        self.Ek2 = 0
-        self.Ek1 = 0
-        self.Ek = 0
-
-        self.t = [0]
+        self.t = [self.tActual]
         self.y = [self.yActual]
         self.co = [self.coActual]
         self.ysp = [self.yspActual]
@@ -126,8 +124,6 @@ class SimuladorControlador:
         plt.title("Gráfica de Tendencia", color='black', size=16)
 
         self.ax.set_facecolor('black')
-        self.ax.axhline(linewidth=2, color='w')
-        self.ax.axvline(linewidth=2, color='w')
         self.ax.set_xlabel("t [s]", color='black')
         self.ax.set_ylabel("y", color='blue')
         self.ax.grid(axis='x', color='gray', linestyle='dashed')
@@ -163,8 +159,9 @@ class SimuladorControlador:
         self.crear_tab_controlador()
         self.crear_tab_exportado()
 
-        # finalización y barra de estado
-        CTkButton(self.frameComandos, text='Reiniciar', width=20, command= self.reiniciar_simulacion).grid(column=0, row=22, padx=5, pady=5)
+        self.boton_iniciar = CTkButton(self.frameComandos, text='Iniciar', width=20, command=self.iniciar_simulacion, fg_color='green')
+        self.boton_iniciar.grid(column=0, row=22, padx=10, pady=10)
+        CTkButton(self.frameComandos, text='Reiniciar', width=20, command= self.reiniciar_simulacion).grid(column=1, row=22, padx=5, pady=5)
         CTkButton(self.frameComandos, text='Finalizar', width=20, command= self.finalizar_aplicacion).grid(column=2, row=22, padx=5, pady=5)
         self.labelStatus = CTkLabel(self.frameComandos, text='')
         self.labelStatus.grid(column=0, row= 24, columnspan=2)
@@ -176,8 +173,6 @@ class SimuladorControlador:
         self.entradaKp = self.crear_parametro_input(self.tabview.tab("Simulación"), 'Kp', self.Kp, 1, self.actualizar_kp)
         self.entradaTaup = self.crear_parametro_input(self.tabview.tab("Simulación"), 'Tau', self.taup, 2, self.actualizar_taup)
         self.entradaTd = self.crear_parametro_input(self.tabview.tab("Simulación"), 'td', self.td, 3, self.actualizar_td)
-
-        CTkButton(self.tabview.tab("Simulación"), text='Iniciar Simulación', width=200, command=self.iniciar_simulacion, fg_color='green').grid(padx=10, pady=10, row=4, column=0, columnspan=2)
 
         CTkLabel(self.tabview.tab("Simulación"), text='Velocidad de simulación:').grid(column=0, row=18)
         self.scaleVelocidad = CTkSlider(self.tabview.tab("Simulación"), from_=0, to=100, number_of_steps=10, command=self.actualizar_velocidad)
@@ -196,9 +191,9 @@ class SimuladorControlador:
         
         CTkLabel(self.tabview.tab("Controlador"), text='GANANCIAS DEL CONTROLADOR', font=('Verdana',14, 'bold')).grid(padx=10, pady=10, row=10, column=0, columnspan=2)
         
-        self.entradaKc = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Kc', self.Kc, 11, self.actualizar_kc)
-        self.entradaKi = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Ki', self.Ki, 13, self.actualizar_ki)
-        self.entradaKd = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Kd', self.Kd, 14, self.actualizar_kd)
+        self.entradaKc = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Kc', self.Kc, 11, self.actualizar_ganancias)
+        self.entradaKi = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Ki', self.Ki, 13, self.actualizar_ganancias)
+        self.entradaKd = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Kd', self.Kd, 14, self.actualizar_ganancias)
 
         CTkButton(self.tabview.tab("Controlador"), text='Actualizar Ganancias', width=20, command=self.actualizar_ganancias).grid(padx=10, pady=10, row=15, column=0, columnspan=2)
 
@@ -301,13 +296,16 @@ class SimuladorControlador:
             self.entradaKd.delete(0,"end")
             self.entradaKd.insert(0, str(self.Kd))
 
-    def actualizar_ganancias(self):
-        self.actualizar_kc()
-        self.actualizar_ki()
-        self.actualizar_kd()
+    def actualizar_ganancias(self, event=None):
+        self.actualizar_kc(event)
+        self.actualizar_ki(event)
+        self.actualizar_kd(event)
+
+        self.controller.set_controller_gains(self.Kc, self.Ki, self.Kd)
 
     def actualizar_estado_control(self):
         self.controlAutomaticoEncendido = self.controlAutomatico.get()
+        self.controller.set_controller_status(self.controlAutomaticoEncendido)
         if self.controlAutomaticoEncendido:
             self.labelCO.grid_forget()
             self.entradaCO.grid_forget()
@@ -364,7 +362,7 @@ class SimuladorControlador:
             self.entradaTaup.configure(state='disabled')
             self.entradaTd.configure(state='disabled')
             self.simulacion_pid()
-            CTkButton(self.tabview.tab("Simulación"), text='Detener Simulación', width=200, command=self.detener_simulacion, fg_color='red').grid(padx=10, pady=10, row=4, column=0, columnspan=2)
+            self.boton_iniciar.configure(text='Detener', command=self.detener_simulacion, fg_color='red')
         except ValueError:
             showerror("Error", "Ingrese un valor numérico válido para Kp, Tau y td.")
 
@@ -374,22 +372,32 @@ class SimuladorControlador:
         self.entradaKp.configure(state='normal')
         self.entradaTaup.configure(state='normal')
         self.entradaTd.configure(state='normal')
-        CTkButton(self.tabview.tab("Simulación"), text='Iniciar Simulación', width=200, command=self.iniciar_simulacion, fg_color='green').grid(padx=10, pady=10, row=4, column=0, columnspan=2)
+        self.boton_iniciar.configure(text='Iniciar', command=self.iniciar_simulacion, fg_color='green')
 
     # Reiniciar los cálculos de la simulación
     def reiniciar_simulacion(self):
+        self.tstep = 0
         self.tActual = 0
-        self.y = [self.y[-1]]
-        self.co = [self.co[-1]]
-        self.ysp = [self.ysp[-1]]
+        self.yActual = self.y[-1]
+        self.coActual = self.co[-1]
+        self.yspActual = self.ysp[-1]
+
+        self.t0 = self.tActual
+        self.y0 = self.yActual
+        self.co0 = self.coActual
+        self.ysp0 = self.yspActual
+
         self.t = [self.tActual]
+        self.y = [self.yActual]
+        self.co = [self.coActual]
+        self.ysp = [self.yspActual]
 
         self.actualizar_grafica()
 
     # Definición del modelo FOPDT
     def fopdt(self, t, y, co):
         u = 0 if t < self.td + self.tstep else 1
-        dydt = -(y - self.y0) / self.taup + self.Kp / self.taup * (u - self.u0) * (co - self.co0)
+        dydt = -(y - self.y0) / self.taup + self.Kp / self.taup * u * (co - self.co0)
         return dydt
 
     # Solución del modelo del lazo de control
@@ -410,29 +418,11 @@ class SimuladorControlador:
                 except:
                     coAtrasado = self.co0
 
-                # # Usar odeint
-                # def fopdt_odeint(y, t, co):
-                #     return self.fopdt(t, y, co)  # La función se reordena según odeint
-                # sol = odeint(fopdt_odeint,self.y[-1],ts,args=tuple([coAtrasado]))
-                # self.y.append(float(sol[-1][0])*np.random.normal(self.mean,np.sqrt(self.variance*self.ruidoSenalEncendido)))
-
-                # Usar solve_ivp
                 sol = solve_ivp(self.fopdt, ts, [self.y[-1]], method='RK45', t_eval=[self.tActual], args=tuple([coAtrasado]))
-                self.y.append(float(sol.y[0][-1]) * np.random.normal(self.mean, np.sqrt(self.variance * self.ruidoSenalEncendido)))
+                self.y.append(float(sol.y[0][-1]) * np.random.normal(1, np.sqrt(self.variance * self.ruidoSenalEncendido)))
 
-                if self.controlAutomaticoEncendido:
-                    # PID
-                    self.Ek2 = self.Ek1
-                    self.Ek1 = self.Ek
-                    self.Ek = self.ysp[-1] - self.y[-1]
-                    q0 = self.Kc + self.Ts * self.Ki / 2 + self.Kd / self.Ts
-                    q1 = self.Kc - self.Ts * self.Ki / 2 + 2 * self.Kd / self.Ts
-                    q2 = self.Kd / self.Ts
-                    deltaCO = q0 * self.Ek - q1 * self.Ek1 + q2 * self.Ek2
-                    nuevoCO = self.co[-1] + deltaCO
-                    self.co.append(max(0, min(100, nuevoCO)))  # Limitar entre 0 y 100
-                else:
-                    self.co.append(self.coActual)
+                nuevoCO = self.controller.calculate_CO(self.y[-1], self.ysp[-1], self.co[-1])
+                self.co.append(nuevoCO)
 
             self.actualizar_grafica()
 
@@ -456,9 +446,14 @@ class SimuladorControlador:
         self.ax.tick_params(direction='out', colors='w', grid_color='w', grid_alpha=0.3)
         self.twax.yaxis.set_minor_locator(AutoMinorLocator(10))
 
-        self.ax.plot(self.t, self.y, 'b', label='Y', linestyle='solid')
-        self.ax.plot(self.t, self.ysp, color ='r', label='Y_sp', linestyle='solid')
-        self.twax.plot(self.t, self.co, 'purple', label='CO', linestyle='solid')
+        self.ax.plot(self.t, self.y, color ='b', label='Y', linestyle='solid')
+        self.ax.plot(self.t, self.ysp, color ='r', label='Ysp', linestyle='dashed')
+        self.twax.plot(self.t, self.co, color ='purple', label='CO', linestyle='solid')
+
+
+        handles1, labels1 = self.ax.get_legend_handles_labels()
+        handles2, labels2 = self.twax.get_legend_handles_labels()
+        self.ax.legend(handles1 + handles2, labels1 + labels2, loc='upper right')
 
         self.ax.set_xlabel("t [s]", color='black')
         self.ax.set_ylabel("y", color='blue')

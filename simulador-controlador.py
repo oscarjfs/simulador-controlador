@@ -1,550 +1,532 @@
 """
-Nombre: simulador-controlador.py
+Nombre: simulador_controlador.py
 Autor: Oscar Franco
-Versión: 6.2 (2024-08-06)
+Versión: 7 (2024-09-17)
 Descripción: Aplicación para simular el comportamiento de un sistema según su función de transferencia
-            en lazo abierto o al aplicar un controlador PID
+            en lazo abierto o aplicando un controlador PID.
 """
 
-from customtkinter import *
+import json
+import datetime
+import numpy as np
+from customtkinter import CTk, CTkButton, CTkEntry, CTkLabel, CTkFrame, CTkTabview, CTkSlider, CTkSwitch, CTkRadioButton, BooleanVar, StringVar, set_appearance_mode, set_default_color_theme
 from tkinter.messagebox import showerror, askyesno
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.ticker import AutoMinorLocator, MultipleLocator
-import numpy as np
-from scipy.integrate import odeint
-import datetime
-import json
+from scipy.integrate import odeint, solve_ivp
 from pandas import DataFrame
 
-# cargue de configuración desde config.json
-try:
-    with open('config.json') as file:
-        configuracion = json.load(file)
-except:
-    # crea la configuración por defecto si no encuentra el archivo config.json
-    configJson = """{   
-        "mean": 1.0,
-        "variance": 1e-8,
-        "tVel": 10,
-        "ruidoSenalEncendido": 1,
-        "Ts": 0.1,
-        "controlAutomaticoEncendido": 1,
-        "tminGrafica": 120,
-        "estadoSimulacion": 1,
-        "Kp": 4.59,
-        "taup": 15.14,
-        "td": 5.0,
-        "Kc": 0.6058,
-        "Ki": 0.0606,
-        "Kd": 0.0,
-        "t0": 0,
-        "y0": 50,
-        "co0": 50,
-        "u0": 0,
-        "ysp0": 50
-    }"""
+# Clase para la simulación del controlador PID
+class SimuladorControlador:
+    CONFIG_FILE = 'config.json'
 
-    with open('config.json', 'w+') as file:
-        file.write(configJson)
+    def __init__(self):
+        self.configuracion = self.cargar_configuracion()
+        self.inicializar_parametros()
+        self.inicializar_estado_simulacion()
+        self.crear_gui()
 
-    with open('config.json') as file:
-        configuracion = json.load(file)
-
-# parámetros del randomizador de señales
-mean = configuracion['mean']
-variance = configuracion['variance']
-
-tVel = configuracion['tVel'] # velocidad de simulación
-Ts = configuracion['Ts'] # tiempo de muestreo
-controlAutomaticoEncendido = bool(configuracion['controlAutomaticoEncendido']) # estado del controlador (encendido/apagado)
-tminGrafica = configuracion['tminGrafica'] # ventana de tiempo visible en la gráfica de tendencia
-estadoSimulacion = bool(configuracion['estadoSimulacion']) # estado de calculos de la simulación
-ruidoSenalEncendido = bool(configuracion['ruidoSenalEncendido']) # estado del cálculo del ruido en la señal de la variable medida
-
-Kp = configuracion['Kp'] # ganancia del proceso
-taup = configuracion['taup'] # constante de tiempo del proceso
-td = configuracion['td'] # tiempo muerto del proceso
-
-Kc = configuracion['Kc'] # ganancia proporcional del controlador
-Ki = configuracion['Ki'] # ganancia integral del controlador
-Kd = configuracion['Kd'] # ganancia derivativa del controlador
-
-# condiciones inciales
-t0 = configuracion['t0']
-y0 = configuracion['y0']
-co0 = configuracion['co0']
-u0 = configuracion['u0']
-ysp0 = configuracion['ysp0']
-
-cambiosParametros = False
-
-# inicializamos las variables de error
-Ek2 = 0
-Ek1 = 0
-Ek = 0
-
-# inicialización de los datos actuales
-tstep = 0
-tActual = t0
-yActual = y0
-coActual = co0
-yspActual = ysp0
-
-# inicialización de las listas de datos de las tendencias
-t = [0]
-y = [y0]
-co = [co0]
-ysp = [ysp0]
-nDatosGrafica = round(tminGrafica/Ts)
-
-# modelo a simular
-def fopdt(y,t,co):
-
-    u = 0 if t<td+tstep else 1
-
-    # calcular la derivada
-    dydt = -(y-y0)/taup + Kp/taup * (u-u0) * (co-co0)
-
-    return dydt
-
-# arranca la simulación
-def iniciar_simulacion():
-    global estadoSimulacion
-    estadoSimulacion = True
-    if float(entradaKp.get()) != Kp:
-        actualizar_kp()
-    if float(entradaTaup.get()) != taup:
-        actualizar_taup()
-    if float(entradaTd.get()) != td:
-        actualizar_td()
-    entradaKp.configure(state='disabled')
-    entradaTaup.configure(state='disabled')
-    entradaTd.configure(state='disabled')
-    simular_sistema()
-    CTkButton(tabview.tab("Simulación"), text='Detener Simulación', width=200, command=detener_simulacion, fg_color='red').grid(padx=10, pady=10, row=4, column=0, columnspan=2)
-
-# detiene los cálculos de la simulación
-def detener_simulacion():
-    global estadoSimulacion
-    estadoSimulacion = False
-    entradaKp.configure(state='normal')
-    entradaTaup.configure(state='normal')
-    entradaTd.configure(state='normal')
-    CTkButton(tabview.tab("Simulación"), text='Iniciar Simulación', width=200, command=iniciar_simulacion, fg_color='green').grid(padx=10, pady=10, row=4, column=0, columnspan=2)
-
-def reiniciar_simulacion():
-    global tActual, y, co, ysp, t
-
-    tActual = 0
-    y = [y[-1]]
-    co = [co[-1]]
-    ysp = [ysp[-1]]
-    t = [tActual]
-
-    plt.xlim(tActual, tminGrafica+tActual) # ajuste del eje del tiempo
-    yMin = np.amin([round(np.amin(y)),round(np.amin(ysp))])
-    yMax = np.amax([round(np.amax(y)),round(np.amax(ysp))])
-    if yMax == yMin:
-        ax.set_ylim(yMin-1, yMax+1)
-    else:
-        ax.set_ylim(yMin*.95, yMax*1.05)
-    
-    if round(min(co)) == round(max(co)):
-        twax.set_ylim(round(np.amin(co))-1, round(np.amax(co))+1)
-    else:
-        twax.set_ylim(round(np.amin(co))*.95, round(np.amax(co))*1.05)
-
-# actualiza el valor de Kp desde el campo de entrada
-def actualizar_kp(event=None):
-    global Kp, cambiosParametros
-    kpEntry = entradaKp.get()
-    try:
-        Kp = float(kpEntry)
-        cambiosParametros = True
-    except:
-        showerror(message=f'El valor Kp={kpEntry} no es un número válido', title='Simulador de Lazos de Control by OF')
-        entradaKp.delete(0,"end")
-        entradaKp.insert(0, str(Kp))
-
-# actualiza el valor de taup desde el campo de entrada
-def actualizar_taup(event=None):
-    global taup, cambiosParametros
-    taupEntry = entradaTaup.get()
-    try:
-        taup = float(taupEntry)
-        cambiosParametros = True
-    except:
-        showerror(message=f'El valor tau={taupEntry} no es un número válido', title='Simulador de Lazos de Control by OF')
-        entradaTaup.delete(0,"end")
-        entradaTaup.insert(0, str(taup))
-
-# actualiza el valor de td desde el campo de entrada
-def actualizar_td(event=None):
-    global td, cambiosParametros
-    tdEntry = entradaTd.get()
-    try:
-        td = float(tdEntry)
-        cambiosParametros = True
-    except:
-        showerror(message=f'El valor Kp={tdEntry} no es un número válido', title='Simulador de Lazos de Control by OF')
-        entradaTd.delete(0,"end")
-        entradaTd.insert(0, str(td))
-
-# actualiza el valor de ysp desde el campo de entrada
-def actualizar_sp(event=None):
-    global yspActual, tstep, co0, y0
-    yspEntry = entradaSetPoitn.get()
-    try:
-        yspActual = float(yspEntry)
-        tstep = tActual
-        co0 = co[-1]
-        y0 = y[-1]
-    except:
-        showerror(message=f'El valor {yspEntry} no es un número válido', title='Simulador de Lazos de Control by OF')
-        entradaSetPoitn.delete(0,"end")
-        entradaSetPoitn.insert(0, str(yspActual))
-
-# actualiza el valor de Kc desde el campo de entrada
-def actualizar_kc(event=None):
-    global Kc, cambiosParametros
-    kcEntry = entradaKc.get()
-    try:
-        Kc = float(kcEntry)
-        cambiosParametros = True
-    except:
-        showerror(message=f'El valor Kc={kcEntry} no es un número válido', title='Simulador de Lazos de Control by OF')
-        entradaKc.delete(0,"end")
-        entradaKc.insert(0, str(Kc))
-
-# actualiza el valor de Ki desde el campo de entrada
-def actualizar_ki(event=None):
-    global Ki, cambiosParametros
-    kiEntry = entradaKi.get()
-    try:
-        Ki = float(kiEntry)
-        cambiosParametros = True
-    except:
-        showerror(message=f'El valor Ki={kiEntry} no es un número válido', title='Simulador de Lazos de Control by OF')
-        entradaKi.delete(0,"end")
-        entradaKi.insert(0, str(Ki))
-
-# actualiza el valor de Kd desde el campo de entrada
-def actualizar_kd(event=None):
-    global Kd, cambiosParametros
-    kdEntry = entradaKd.get()
-    try:
-        Kd = float(kdEntry)
-        cambiosParametros = True
-    except:
-        showerror(message=f'El valor Kd={kdEntry} no es un número válido', title='Simulador de Lazos de Control by OF')
-        entradaKd.delete(0,"end")
-        entradaKd.insert(0, str(Kd))
-
-# actualiza todas las ganancias desde los campos de entrada
-def actualizar_ganancias():
-    actualizar_kc()
-    actualizar_ki()
-    actualizar_kd()
-
-# enciende/apaga el controlador
-def actualizar_estado_control():
-    global controlAutomaticoEncendido, coActual
-    controlAutomaticoEncendido = controlAutomatico.get()
-    if controlAutomaticoEncendido:
-        labelCO.grid_forget()
-        entradaCO.grid_forget()
-    else:
-        labelCO.grid(pady=5, row=17, column=0)
-        entradaCO.grid(padx=5, row=17, column=1)
-        entradaCO.delete(0, "end")
-        coActual = co[-1]
-        entradaCO.insert(0, str(round(coActual,4)))
-
-# cambiar la salida del controlador cuando se ejecuta en manual
-def actualizar_co(event=None):
-    global coActual, tstep, co0, y0
-    coEntry = entradaCO.get()
-    try:
-        coActual = float(coEntry)
-        tstep = tActual
-        co0 = co[-1]
-        y0 = y[-1]
-    except:
-        showerror(message=f'El valor CO={coEntry} no es un número válido', title='Simulador de Lazos de Control by OF')
-        entradaCO.delete(0,"end")
-        entradaCO.insert(0, str(coActual))
-
-# cambia la velocidad de ejecución de la simulación
-def actualizar_velocidad(event=None):
-    global tVel
-    nuevaVelocidad = round(scaleVelocidad.get(), -1)
-    if nuevaVelocidad<1:
-        scaleVelocidad.set(1)
-        tVel = 1
-    else:
-        scaleVelocidad.set(nuevaVelocidad)
-        tVel = int(nuevaVelocidad)
-
-def actualizar_estado_ruido():
-    global ruidoSenalEncendido
-    ruidoSenalEncendido = simularRuido.get()
-        
-# realiza una iteración de la simulación del modelo
-def simular_sistema():
-    global tActual, t, y, ysp, Ek, Ek1, Ek2, co
-
-    for i in range(tVel):
-
-        tActual = t[-1] + Ts
-        t.append(tActual)
-
-        ts = [t[-2],t[-1]]
-
-        ysp.append(yspActual)
-
+    # Cargar configuración desde archivo JSON
+    def cargar_configuracion(self):
         try:
-            coAtrasado = co[-int(td/Ts)]
-        except:
-            coAtrasado = co0
-        y1 = odeint(fopdt,y[-1],ts,args=tuple([coAtrasado]))
-        y.append(float(y1[-1][0])*np.random.normal(mean,np.sqrt(variance*ruidoSenalEncendido)))
+            with open(self.CONFIG_FILE) as file:
+                return json.load(file)
+        except FileNotFoundError:
+            self.crear_configuracion_default()
+            with open(self.CONFIG_FILE) as file:
+                return json.load(file)
 
-        if controlAutomaticoEncendido:
-            ## PID
-            Ek2 = Ek1
-            Ek1 = Ek
-            Ek = ysp[-1] - y[-1]
-            q0 = Kc + Ts*Ki/2 + Kd/Ts
-            q1 = Kc - Ts*Ki/2 + 2*Kd/Ts
-            q2 = Kd/Ts
-            deltaCO = q0*Ek - q1*Ek1 + q2*Ek2
-            if co[-1] + deltaCO < 0:
-                co.append(0)
-            elif co[-1] + deltaCO > 100:
-                co.append(100)           
-            else:
-                co.append(co[-1] + deltaCO)
-        else:
-            co.append(coActual)
+    # Crear configuración por defecto si no existe
+    def crear_configuracion_default(self):
+        config_default = {
+            "mean": 1.0,
+            "variance": 5e-09,
+            "tVel": 50,
+            "ruidoSenalEncendido": True,
+            "Ts": 0.1,
+            "controlAutomaticoEncendido": True,
+            "tminGrafica": 120,
+            "estadoSimulacion": True,
+            "Kp": 4.59,
+            "taup": 15.14,
+            "td": 5.0,
+            "Kc": 0.6058,
+            "Ki": 0.0606,
+            "Kd": 0.0,
+            "t0": 0,
+            "y0": 50,
+            "co0": 50,
+            "u0": 0,
+            "ysp0": 50
+        }
+        with open(self.CONFIG_FILE, 'w') as file:
+            json.dump(config_default, file, indent=4)
 
-    if tActual<=tminGrafica:
-        ax.set_xlim(0, tminGrafica)
-    else:
-        ax.set_xlim(tActual-tminGrafica, tActual)
+    # Inicialización de parámetros de simulación desde la configuración
+    def inicializar_parametros(self):
+        config = self.configuracion
+        self.mean = config['mean']
+        self.variance = config['variance']
+        self.tVel = config['tVel']
+        self.Ts = config['Ts']
+        self.controlAutomaticoEncendido = config['controlAutomaticoEncendido']
+        self.tminGrafica = config['tminGrafica']
+        self.Kp = config['Kp']
+        self.taup = config['taup']
+        self.td = config['td']
+        self.Kc = config['Kc']
+        self.Ki = config['Ki']
+        self.Kd = config['Kd']
+        self.cambiosParametros=False
 
+    # Inicializar variables de estado
+    def inicializar_estado_simulacion(self):
+        self.tstep = 0
+        self.tActual = self.configuracion['t0']
+        self.yActual = self.configuracion['y0']
+        self.coActual = self.configuracion['co0']
+        self.yspActual = self.configuracion['ysp0']
+        self.estadoSimulacion = self.configuracion['estadoSimulacion']
+        self.ruidoSenalEncendido = self.configuracion['ruidoSenalEncendido']
 
-    ax.set_ylim(np.amin([round(np.amin(y[-nDatosGrafica:])), round(np.amin(ysp[-nDatosGrafica:]))])*.95,
-            np.amax([round(np.amax(y[-nDatosGrafica:])), round(np.amax(ysp[-nDatosGrafica:])), 1])*1.05) # ajusta el rango del eje y principal
-    twax.set_ylim(0 if np.amin(co[-nDatosGrafica:])<0 else round(np.amin(co[-nDatosGrafica:]))*0.95,
-            1 if np.amax(co[-nDatosGrafica:])<1 else round(np.amax(co[-nDatosGrafica:]))*1.05) # ajusta el rango del eje y secundario
+        self.t0 = self.configuracion['t0']
+        self.y0 = self.configuracion['y0']
+        self.co0 = self.configuracion['co0']
+        self.u0 = self.configuracion['u0']
+        self.ysp0 = self.configuracion['ysp0']
 
-    lineCO, = twax.plot(t, co, color ='purple', linestyle='solid') # crea la línea con los datos
-    lineSP, = ax.plot(t, ysp, color ='r', linestyle='solid') # crea la línea con los datos
-    lineY, = ax.plot(t, y, color ='b', linestyle='solid') # crea la línea con los datos
+        self.Ek2 = 0
+        self.Ek1 = 0
+        self.Ek = 0
+
+        self.t = [0]
+        self.y = [self.yActual]
+        self.co = [self.coActual]
+        self.ysp = [self.yspActual]
+        self.nDatosGrafica = round(self.tminGrafica / self.Ts)
+
+    # GUI principal
+    def crear_gui(self):
+        set_appearance_mode("System")
+        set_default_color_theme("blue")
+
+        self.ventana = CTk()
+        self.ventana.geometry("950x430")
+        self.ventana.minsize(950, 430)
+        self.ventana.title('Simulador de Lazos de Control by OF')
+        self.ventana.protocol('WM_DELETE_WINDOW', self.finalizar_aplicacion)
+
+        self.crear_grafica_tendencia()
+        self.crear_comandos_gui()
+
+    # Crear la gráfica de tendencias
+    def crear_grafica_tendencia(self):
+        self.fig, self.ax = plt.subplots(facecolor='grey')
+        plt.title("Gráfica de Tendencia", color='black', size=16)
+
+        self.ax.set_facecolor('black')
+        self.ax.axhline(linewidth=2, color='w')
+        self.ax.axvline(linewidth=2, color='w')
+        self.ax.set_xlabel("t [s]", color='black')
+        self.ax.set_ylabel("y", color='blue')
+        self.ax.grid(axis='x', color='gray', linestyle='dashed')
+        self.ax.yaxis.set_minor_locator(AutoMinorLocator(5))
+        self.ax.yaxis.set_major_locator(MultipleLocator(1))
+        self.ax.xaxis.set_minor_locator(AutoMinorLocator(10))
+        self.ax.xaxis.grid(which='minor', linestyle='dotted', color='gray')
+        self.ax.tick_params(direction='out', colors='w', grid_color='w', grid_alpha=0.3)
+
+        self.twax = self.ax.twinx()
+        self.twax.set_ylabel('CO [%]', color='purple')
+        self.twax.set_ylim(0, 100)
+        self.twax.tick_params(direction='out', length=6, width=1, colors='purple') #AQUI
+
+        self.frameGrafico = CTkFrame(self.ventana)
+        self.frameGrafico.pack(side="left", expand=True, fill='both')
+
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.frameGrafico)
+        self.canvas.get_tk_widget().pack(expand=True, padx=10, pady=10, fill='both')
+
+    # Crear el área de comandos (controlador y simulación)
+    def crear_comandos_gui(self):
+        self.frameComandos = CTkFrame(self.ventana)
+        self.frameComandos.pack(side="right", fill='y')
+
+        self.tabview = CTkTabview(self.frameComandos)
+        self.tabview.grid(row=0, column=0, columnspan=3, sticky='n')
+        self.tabview.add("Simulación")
+        self.tabview.add("Controlador")
+        self.tabview.add("Exportado")
+
+        self.crear_tab_simulacion()
+        self.crear_tab_controlador()
+        self.crear_tab_exportado()
+
+        # finalización y barra de estado
+        CTkButton(self.frameComandos, text='Reiniciar', width=20, command= self.reiniciar_simulacion).grid(column=0, row=22, padx=5, pady=5)
+        CTkButton(self.frameComandos, text='Finalizar', width=20, command= self.finalizar_aplicacion).grid(column=2, row=22, padx=5, pady=5)
+        self.labelStatus = CTkLabel(self.frameComandos, text='')
+        self.labelStatus.grid(column=0, row= 24, columnspan=2)
+
+    # Crear la pestaña de simulación
+    def crear_tab_simulacion(self):
+        CTkLabel(self.tabview.tab("Simulación"), text='PARÁMETROS DEL SISTEMA', font=('Verdana', 14, 'bold')).grid(padx=10, pady=10, row=0, column=0, columnspan=3)
+
+        self.entradaKp = self.crear_parametro_input(self.tabview.tab("Simulación"), 'Kp', self.Kp, 1, self.actualizar_kp)
+        self.entradaTaup = self.crear_parametro_input(self.tabview.tab("Simulación"), 'Tau', self.taup, 2, self.actualizar_taup)
+        self.entradaTd = self.crear_parametro_input(self.tabview.tab("Simulación"), 'td', self.td, 3, self.actualizar_td)
+
+        CTkButton(self.tabview.tab("Simulación"), text='Iniciar Simulación', width=200, command=self.iniciar_simulacion, fg_color='green').grid(padx=10, pady=10, row=4, column=0, columnspan=2)
+
+        CTkLabel(self.tabview.tab("Simulación"), text='Velocidad de simulación:').grid(column=0, row=18)
+        self.scaleVelocidad = CTkSlider(self.tabview.tab("Simulación"), from_=0, to=100, number_of_steps=10, command=self.actualizar_velocidad)
+        self.scaleVelocidad.grid(padx=10, pady=10, row=19, column=0, columnspan=2)
+        self.scaleVelocidad.set(self.tVel)
+
+        self.simularRuido = BooleanVar(value=True)
+        self.checkSimularRuido = CTkSwitch(self.tabview.tab("Simulación"), text='Simulación de Señal Ruidosa',
+                                            variable=self.simularRuido, command=self.actualizar_estado_ruido)
+        self.checkSimularRuido.grid(padx=10, pady=10, row=20, column=0, columnspan=2)
+
+    # Crear la pestaña del controlador
+    def crear_tab_controlador(self):
+        self.entradaSetPoitn = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Set point', self.yspActual, 7, self.actualizar_sp)
+        CTkButton(self.tabview.tab("Controlador"), text='Actualizar SP', width=20, command=self.actualizar_sp).grid(padx=10, pady=10, row=8, column=0, columnspan=2)
         
-    canvas.draw() # graficar
+        CTkLabel(self.tabview.tab("Controlador"), text='GANANCIAS DEL CONTROLADOR', font=('Verdana',14, 'bold')).grid(padx=10, pady=10, row=10, column=0, columnspan=2)
+        
+        self.entradaKc = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Kc', self.Kc, 11, self.actualizar_kc)
+        self.entradaKi = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Ki', self.Ki, 13, self.actualizar_ki)
+        self.entradaKd = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Kd', self.Kd, 14, self.actualizar_kd)
 
-    lineCO.set_ydata([1e6]*len(t))
-    lineSP.set_ydata([1e6]*len(t))
-    lineY.set_ydata([1e6]*len(t))
+        CTkButton(self.tabview.tab("Controlador"), text='Actualizar Ganancias', width=20, command=self.actualizar_ganancias).grid(padx=10, pady=10, row=15, column=0, columnspan=2)
 
-    if estadoSimulacion:
-        ventana.after(100, simular_sistema) # tiempo de actualización de la gráfica
+        self.controlAutomatico = BooleanVar(value=True)
+        self.checkControlAutomatico = CTkSwitch(self.tabview.tab("Controlador"), text='Control Automático Activo',
+                                            variable=self.controlAutomatico, command=self.actualizar_estado_control)
+        self.checkControlAutomatico.grid(padx=10, pady=10, row=16, column=0, columnspan=2)
 
-# exportar datos de la tendencia a CSV
-def  exportar_datos():
-    global t, co, y, ysp
-    
-    ahora = datetime.datetime.now()
-    nombreArchivo = f'data_{ahora}'.replace(':','_')
+        self.labelCO = CTkLabel(self.tabview.tab("Controlador"), text='CO: ')
+        self.entradaCO = CTkEntry(self.tabview.tab("Controlador"), width=100)
+        self.entradaCO.bind('<Return>', self.actualizar_co)
 
-    datos = {
-        't': t,
-        'CO': co,
-        'y': y,
-        'ysp': ysp
-    }
+    # Crear la pestaña de exportación
+    def crear_tab_exportado(self):
+        CTkButton(self.tabview.tab("Exportado"), text='Exportar', width=20, command= self.exportar_datos).grid(column=0, row=4, padx=5, pady=5, columnspan=2)
 
-    df = DataFrame(datos)
+        self.formatoExportado = StringVar(value='xlsx')
+        CTkLabel(self.tabview.tab("Exportado"), text="Formato de exportado:").grid(row=0, column=0, columnspan=1, padx=10, pady=10, sticky="")
+        CTkRadioButton(self.tabview.tab("Exportado"), variable=self.formatoExportado, value='xlsx', text='xlsx').grid(row=2, column=0, pady=10, padx=20)
+        CTkRadioButton(self.tabview.tab("Exportado"), variable=self.formatoExportado, value='csv', text='csv').grid(row=2, column=1, pady=10, padx=20)
 
-    formato = formatoExportado.get()
+    # Función para crear inputs de parámetros en la GUI
+    def crear_parametro_input(self, parent, label, def_value, row, command):
+        CTkLabel(parent, text=f'{label}: ').grid(pady=5, row=row, column=0)
+        entrada = CTkEntry(parent, width=100)
+        entrada.insert(0, str(def_value))
+        entrada.grid(padx=5, row=row, column=1)
+        entrada.bind('<Return>', command)
+        return entrada
 
-    # exportar datos a excel
-    if formato=='xlsx':
-        df.to_excel(nombreArchivo + '.xlsx', index=False)
+    # Actualizaciones de parámetros
+    def actualizar_kp(self, event=None):
+        """Actualiza el valor de Kp basado en la entrada del usuario."""
+        try:
+            self.Kp = float(self.entradaKp.get())
+            self.cambiosParametros = True
+        except ValueError:
+            showerror("Error", "Ingrese un valor numérico válido para Kp.")
+            self.entradaKp.delete(0,"end")
+            self.entradaKp.insert(0, str(self.Kp))
 
-    # exportar datos a csv
-    if formato=='csv':
-        df.to_csv(nombreArchivo + '.csv', decimal=',', sep=';', index=False)
+    def actualizar_taup(self, event=None):
+        """Actualiza el valor de Taup basado en la entrada del usuario."""
+        try:
+            self.taup = float(self.entradaTaup.get())
+            self.cambiosParametros = True
+        except ValueError:
+            showerror("Error", "Ingrese un valor numérico válido para Taup.")
+            self.entradaTaup.delete(0,"end")
+            self.entradaTaup.insert(0, str(self.taup))
 
-    labelStatus.configure(text= f'Exportado {ahora}') # mensaje de confirmación del exportado
+    def actualizar_td(self, event=None):
+        """Actualiza el valor de Td basado en la entrada del usuario."""
+        try:
+            self.td = float(self.entradaTd.get())
+            self.cambiosParametros = True
+        except ValueError:
+            showerror("Error", "Ingrese un valor numérico válido para Td.")
+            self.entradaTd.delete(0,"end")
+            self.entradaTd.insert(0, str(self.td))
 
-def finalizar_aplicacion():
-    global configuracion
+    def actualizar_sp(self, event=None):
+        try:
+            self.yspActual = float(self.entradaSetPoitn.get())
+            self.tstep = self.tActual
+            self.co0 = self.co[-1]
+            self.y0 = self.y[-1]
+        except:
+            showerror("Error", "Ingrese un valor numérico válido para el set point.")
+            self.entradaSetPoitn.delete(0,"end")
+            self.entradaSetPoitn.insert(0, str(self.yspActual))
 
-    salir = askyesno(message='¿Desea salir del simulador?', title='Simulador de Lazos de Control by OF')
-    if salir:
-        if cambiosParametros:
+    def actualizar_kc(self, event=None):
+        """Actualiza el valor de Kc basado en la entrada del usuario."""
+        try:
+            self.Kc = float(self.entradaKc.get())
+            self.cambiosParametros = True
+        except:
+            showerror("Error", "Ingrese un valor numérico válido para Kc.")
+            self.entradaKc.delete(0,"end")
+            self.entradaKc.insert(0, str(self.Kc))
 
-            seleccion = askyesno(message='¿Desea guardar la confirugación actual?', title='Simulador de Lazos de Control by OF')
+    def actualizar_ki(self, event=None):
+        """Actualiza el valor de Ki basado en la entrada del usuario."""
+        try:
+            self.Ki = float(self.entradaKi.get())
+            self.cambiosParametros = True
+        except:
+            showerror("Error", "Ingrese un valor numérico válido para Ki.")
+            self.entradaKi.delete(0,"end")
+            self.entradaKi.insert(0, str(self.Ki))
 
-            if seleccion:
-                configuracion['Kp'] = float(entradaKp.get())
-                configuracion['taup'] = float(entradaTaup.get())
-                configuracion['td'] = float(entradaTd.get())
-                configuracion['Kc'] = float(entradaKc.get())
-                configuracion['Ki'] = float(entradaKi.get())
-                configuracion['Kd'] = float(entradaKd.get())
+    def actualizar_kd(self, event=None):
+        """Actualiza el valor de Kd basado en la entrada del usuario."""
+        try:
+            self.Kd = float(self.entradaKd.get())
+            self.cambiosParametros = True
+        except:
+            showerror("Error", "Ingrese un valor numérico válido para Kd.")
+            self.entradaKd.delete(0,"end")
+            self.entradaKd.insert(0, str(self.Kd))
 
-                configJson = json.dumps(configuracion)
-                with open('config.json', 'w+') as file:
-                    file.write(configJson)    
+    def actualizar_ganancias(self):
+        self.actualizar_kc()
+        self.actualizar_ki()
+        self.actualizar_kd()
 
-        ventana.quit()
+    def actualizar_estado_control(self):
+        self.controlAutomaticoEncendido = self.controlAutomatico.get()
+        if self.controlAutomaticoEncendido:
+            self.labelCO.grid_forget()
+            self.entradaCO.grid_forget()
+        else:
+            self.labelCO.grid(pady=5, row=17, column=0)
+            self.entradaCO.grid(padx=5, row=17, column=1)
+            self.entradaCO.delete(0, "end")
+            self.coActual = self.co[-1]
+            self.entradaCO.insert(0, str(round(self.coActual,1)))
 
+    def actualizar_co(self, event=None):
+        """Actualiza el valor de CO basado en la entrada del usuario."""
+        try:
+            self.coActual = float(self.entradaCO.get())
+            self.tstep = self.tActual
+            self.co0 = self.co[-1]
+            self.y0 = self.y[-1]
+        except:
+            showerror("Error", "Ingrese un valor numérico válido para CO.")
+            self.entradaCO.delete(0,"end")
+            self.entradaCO.insert(0, str(self.coActual))
+
+    def guardar_configuracion(self):
+        """Guarda los cambios de configuración en el archivo JSON."""
+        with open(self.CONFIG_FILE, 'w') as file:
+            json.dump(self.configuracion, file, indent=4)
+
+    def actualizar_velocidad(self, event=None):
+        nuevaVelocidad = round(self.scaleVelocidad.get(), -1)
+        if nuevaVelocidad<1:
+            self.scaleVelocidad.set(1)
+            self.tVel = 1
+        else:
+            self.scaleVelocidad.set(nuevaVelocidad)
+            self.tVel = int(nuevaVelocidad)
+
+    def actualizar_estado_ruido(self):
+        self.ruidoSenalEncendido = self.simularRuido.get()
+
+    # Iniciar simulación
+    def iniciar_simulacion(self):
+        """Inicia la simulación del sistema."""
+
+        self.estadoSimulacion = True
+        try:
+            if float(self.entradaKp.get()) != self.Kp:
+                self.actualizar_kp()
+            if float(self.entradaTaup.get()) != self.taup:
+                self.actualizar_taup()
+            if float(self.entradaTd.get()) != self.td:
+                self.actualizar_td()
+
+            self.entradaKp.configure(state='disabled')
+            self.entradaTaup.configure(state='disabled')
+            self.entradaTd.configure(state='disabled')
+            self.simulacion_pid()
+            CTkButton(self.tabview.tab("Simulación"), text='Detener Simulación', width=200, command=self.detener_simulacion, fg_color='red').grid(padx=10, pady=10, row=4, column=0, columnspan=2)
+        except ValueError:
+            showerror("Error", "Ingrese un valor numérico válido para Kp, Tau y td.")
+
+    # Detener los cálculos de la simulación
+    def detener_simulacion(self):
+        self.estadoSimulacion = False
+        self.entradaKp.configure(state='normal')
+        self.entradaTaup.configure(state='normal')
+        self.entradaTd.configure(state='normal')
+        CTkButton(self.tabview.tab("Simulación"), text='Iniciar Simulación', width=200, command=self.iniciar_simulacion, fg_color='green').grid(padx=10, pady=10, row=4, column=0, columnspan=2)
+
+    # Reiniciar los cálculos de la simulación
+    def reiniciar_simulacion(self):
+        self.tActual = 0
+        self.y = [self.y[-1]]
+        self.co = [self.co[-1]]
+        self.ysp = [self.ysp[-1]]
+        self.t = [self.tActual]
+
+        self.actualizar_grafica()
+
+    # Definición del modelo FOPDT
+    def fopdt(self, t, y, co):
+        u = 0 if t < self.td + self.tstep else 1
+        dydt = -(y - self.y0) / self.taup + self.Kp / self.taup * (u - self.u0) * (co - self.co0)
+        return dydt
+
+    # Solución del modelo del lazo de control
+    def simulacion_pid(self):
+        """Simulación del lazo de control PID."""
+        try:
+            for i in range(self.tVel):
+
+                self.tActual = self.t[-1] + self.Ts
+                self.t.append(self.tActual)
+
+                ts = [self.t[-2], self.t[-1]]  # Intervalo de tiempo
+
+                self.ysp.append(self.yspActual)
+
+                try:
+                    coAtrasado = self.co[-int(self.td/self.Ts)]  # Control retrasado
+                except:
+                    coAtrasado = self.co0
+
+                # # Usar odeint
+                # def fopdt_odeint(y, t, co):
+                #     return self.fopdt(t, y, co)  # La función se reordena según odeint
+                # sol = odeint(fopdt_odeint,self.y[-1],ts,args=tuple([coAtrasado]))
+                # self.y.append(float(sol[-1][0])*np.random.normal(self.mean,np.sqrt(self.variance*self.ruidoSenalEncendido)))
+
+                # Usar solve_ivp
+                sol = solve_ivp(self.fopdt, ts, [self.y[-1]], method='RK45', t_eval=[self.tActual], args=tuple([coAtrasado]))
+                self.y.append(float(sol.y[0][-1]) * np.random.normal(self.mean, np.sqrt(self.variance * self.ruidoSenalEncendido)))
+
+                if self.controlAutomaticoEncendido:
+                    # PID
+                    self.Ek2 = self.Ek1
+                    self.Ek1 = self.Ek
+                    self.Ek = self.ysp[-1] - self.y[-1]
+                    q0 = self.Kc + self.Ts * self.Ki / 2 + self.Kd / self.Ts
+                    q1 = self.Kc - self.Ts * self.Ki / 2 + 2 * self.Kd / self.Ts
+                    q2 = self.Kd / self.Ts
+                    deltaCO = q0 * self.Ek - q1 * self.Ek1 + q2 * self.Ek2
+                    nuevoCO = self.co[-1] + deltaCO
+                    self.co.append(max(0, min(100, nuevoCO)))  # Limitar entre 0 y 100
+                else:
+                    self.co.append(self.coActual)
+
+            self.actualizar_grafica()
+
+            if self.estadoSimulacion:
+                self.ventana.after(100, self.simulacion_pid)  # Actualización de la gráfica
+
+        except Exception as e:
+            showerror("Error", f"Error durante la simulación: {e}")
+
+    # Actualizar la gráfica en tiempo real
+    def actualizar_grafica(self):
+        """Actualiza la gráfica de tendencia con los nuevos valores."""
+        self.ax.cla()
+        self.twax.cla()
+
+        self.ax.grid(axis='x', color='gray', linestyle='dashed')
+        self.ax.yaxis.set_minor_locator(AutoMinorLocator(5))
+        self.ax.yaxis.set_major_locator(MultipleLocator(1))
+        self.ax.xaxis.set_minor_locator(AutoMinorLocator(10))
+        self.ax.xaxis.grid(which='minor', linestyle='dotted', color='gray')
+        self.ax.tick_params(direction='out', colors='w', grid_color='w', grid_alpha=0.3)
+        self.twax.yaxis.set_minor_locator(AutoMinorLocator(10))
+
+        self.ax.plot(self.t, self.y, 'b', label='Y', linestyle='solid')
+        self.ax.plot(self.t, self.ysp, color ='r', label='Y_sp', linestyle='solid')
+        self.twax.plot(self.t, self.co, 'purple', label='CO', linestyle='solid')
+
+        self.ax.set_xlabel("t [s]", color='black')
+        self.ax.set_ylabel("y", color='blue')
+        self.twax.set_ylabel('CO [%]', color='purple')
+
+        if self.tActual<=self.tminGrafica:
+            self.ax.set_xlim(0, self.tminGrafica)
+        else:
+            self.ax.set_xlim(self.tActual-self.tminGrafica, self.tActual)
+
+        self.ax.set_ylim(np.amin([round(np.amin(self.y[-self.nDatosGrafica:])), round(np.amin(self.ysp[-self.nDatosGrafica:]))])*.95,
+                np.amax([round(np.amax(self.y[-self.nDatosGrafica:])), round(np.amax(self.ysp[-self.nDatosGrafica:])), 1])*1.05) # ajusta el rango del eje y principal
+        self.twax.set_ylim(0 if np.amin(self.co[-self.nDatosGrafica:])<0 else round(np.amin(self.co[-self.nDatosGrafica:]))*0.95,
+                1 if np.amax(self.co[-self.nDatosGrafica:])<1 else round(np.amax(self.co[-self.nDatosGrafica:]))*1.05) # ajusta el rango del eje y secundari
+
+        self.canvas.draw()
+
+    # Exportar datos de la tendencia a CSV/XLSX
+    def exportar_datos(self):
+        ahora = datetime.datetime.now()
+        nombreArchivo = f'data_{ahora}'.replace(':','_')
+
+        datos = {
+            't': self.t,
+            'CO': self.co,
+            'y': self.y,
+            'ysp': self.ysp
+        }
+
+        df = DataFrame(datos)
+
+        formato = self.formatoExportado.get()
+
+        # exportar datos a excel
+        if formato=='xlsx':
+            df.to_excel(nombreArchivo + '.xlsx', index=False)
+
+        # exportar datos a csv
+        if formato=='csv':
+            df.to_csv(nombreArchivo + '.csv', decimal=',', sep=';', index=False)
+
+        self.labelStatus.configure(text= f'Exportado {ahora}') # mensaje de confirmación del exportado
+
+    # Función para finalizar la aplicación
+    def finalizar_aplicacion(self):
+        """Finaliza la aplicación preguntando al usuario."""
+        if askyesno(message='¿Desea salir del simulador?', title='Simulador de Lazos de Control by OF'):
+            if self.cambiosParametros:
+                if askyesno(message='¿Desea guardar la confirugación actual?', title='Simulador de Lazos de Control by OF'):
+                    self.configuracion['Kp'] = float(self.entradaKp.get())
+                    self.configuracion['taup'] = float(self.entradaTaup.get())
+                    self.configuracion['td'] = float(self.entradaTd.get())
+                    self.configuracion['Kc'] = float(self.entradaKc.get())
+                    self.configuracion['Ki'] = float(self.entradaKi.get())
+                    self.configuracion['Kd'] = float(self.entradaKd.get())
+
+                    self.guardar_configuracion()  
+
+            self.ventana.quit()
+            # self.ventana.destroy()
+
+    # Ejecutar la aplicación
+    def ejecutar(self):
+        """Inicia el loop principal de la interfaz."""
+        self.ventana.mainloop()
+
+
+# Bloque de ejecución principal
 if __name__ == '__main__':
-
-    ############## GRÁFICA DE TENDENCIA
-
-    fig, ax = plt.subplots(facecolor='grey') # creación de figura
-    plt.title("Gráfica de Tendencia",color='black',size=16, family="Arial") # asigna el título de la gráfica
-
-    ax.set_facecolor('black') # asignación del fondo de la gráfica
-
-    ax.axhline(linewidth=2, color='w') # ajuste de propiedades del eje x
-    ax.set_xlabel("t [s]", color='black')
-    ax.axvline(linewidth=2, color='w') # ajuste de propiedades del eje y
-    ax.set_ylabel("y", color='blue')
-    ax.grid(axis = 'x', color = 'gray', linestyle = 'dashed')
-    ax.yaxis.set_minor_locator(AutoMinorLocator(5)) # subdivisiones de eje automáticas
-    ax.yaxis.set_major_locator(MultipleLocator(1))
-    ax.xaxis.set_minor_locator(AutoMinorLocator(10)) # subdivisiones de eje automáticas
-    ax.xaxis.grid(which='minor', linestyle='dotted', color='gray')
-    ax.tick_params(direction='out', colors='w', grid_color='w', grid_alpha=0.3) # parámetros de las marcaciones de los ejes
-
-    twax = ax.twinx() # creación del eje y secundario
-    twax.set_ylabel('CO [%]',color='purple')
-    twax.tick_params(direction='out', length=6, width=1, colors='purple', grid_color='w', grid_alpha=0.5) # parámetros de las marcaciones de los ejes
-    twax.set_ylim(0, 100)
-    twax.yaxis.set_minor_locator(AutoMinorLocator(10)) # subdivisiones de eje automáticas
-
-    ############## GUI
-
-    # Configuración de colores de customtkinter
-    set_appearance_mode("System")  # Modes: system (default), light, dark
-    set_default_color_theme("blue")  # Themes: blue (default), dark-blue, green
-
-    ventana = CTk()
-    ventana.geometry("950x430+0+0")  # Cambia a las dimensiones deseadas
-    ventana.minsize(950,430)
-
-    ventana.title('Simulador de Lazos de Control by OF')
-    # ventana.resizable(height=0, width=0)
-    ventana.protocol('WM_DELETE_WINDOW', finalizar_aplicacion)
-
-    # frame de gráfica
-    frameGrafico = CTkFrame(ventana)
-    frameGrafico.pack(side="left", expand=True, fill='both')
-    canvas = FigureCanvasTkAgg(fig, master = frameGrafico)
-    canvas.get_tk_widget().pack(expand=True, padx=10, pady =10, fill='both')
-
-    # frame de comandos con tabs de opciones
-    frameComandos = CTkFrame(ventana)
-    frameComandos.pack(side="right", fill='y')
-    tabview = CTkTabview(frameComandos)
-    tabview.grid(row=0, column=0, columnspan=3, sticky='n')
-    tabview.add("Simulación")
-    tabview.add("Controlador")
-    tabview.add("Exportado")
-
-    # tab de simulación
-    CTkLabel(tabview.tab("Simulación"), text='PARÁMETROS DEL SISTEMA', font=('Verdana',14, 'bold')).grid(padx=10, pady=10, row=0, column=0, columnspan=3)
-    
-    CTkLabel(tabview.tab("Simulación"), text='Kp: ').grid(pady=5, row=1, column=0)
-    entradaKp = CTkEntry(tabview.tab("Simulación"), width=100)
-    entradaKp.insert(0, str(Kp))
-    entradaKp.grid(padx=5, row=1, column=1)
-    entradaKp.bind('<Return>', actualizar_kp)
-
-    CTkLabel(tabview.tab("Simulación"), text='Tau: ').grid(pady=5, row=2, column=0)
-    entradaTaup = CTkEntry(tabview.tab("Simulación"), width=100)
-    entradaTaup.insert(0, str(taup))
-    entradaTaup.grid(padx=5, row=2, column=1)
-    entradaTaup.bind('<Return>', actualizar_taup)
-
-    CTkLabel(tabview.tab("Simulación"), text='td: ').grid(pady=5, row=3, column=0)
-    entradaTd = CTkEntry(tabview.tab("Simulación"), width=100)
-    entradaTd.insert(0, str(td))
-    entradaTd.grid(padx=5, row=3, column=1)
-    entradaTd.bind('<Return>', actualizar_td)
-
-    CTkButton(tabview.tab("Simulación"), text='Iniciar Simulación', width=200, command=iniciar_simulacion, fg_color='green').grid(padx=10, pady=10, row=4, column=0, columnspan=2)
-
-    CTkLabel(tabview.tab("Simulación"), text='Velocidad de simulación:').grid(column=0, row=18)
-    scaleVelocidad = CTkSlider(tabview.tab("Simulación"), from_=0, to=100, number_of_steps=10, command=actualizar_velocidad)
-    scaleVelocidad.grid(padx=10, pady=10, row=19, column=0, columnspan=2)
-    scaleVelocidad.set(tVel)
-
-    simularRuido = BooleanVar(value=True)
-    checkSimularRuido = CTkSwitch(tabview.tab("Simulación"), text='Simulación de Señal Ruidosa',
-                                        variable=simularRuido, command=actualizar_estado_ruido)
-    checkSimularRuido.grid(padx=10, pady=10, row=20, column=0, columnspan=2)
-
-    # tab de comandos del controlador
-    CTkLabel(tabview.tab("Controlador"), text='Set point:').grid(pady=5, row=7, column=0)
-    entradaSetPoitn = CTkEntry(tabview.tab("Controlador"), width=100)
-    entradaSetPoitn.insert(0, str(yspActual))
-    entradaSetPoitn.grid(padx=5, row=7, column=1)
-    entradaSetPoitn.bind('<Return>', actualizar_sp)
-    CTkButton(tabview.tab("Controlador"), text='Actualizar SP', width=20, command=actualizar_sp).grid(padx=10, pady=10, row=8, column=0, columnspan=2)
-    
-    CTkLabel(tabview.tab("Controlador"), text='GANANCIAS DEL CONTROLADOR', font=('Verdana',14, 'bold')).grid(padx=10, pady=10, row=10, column=0, columnspan=2)
-    
-    CTkLabel(tabview.tab("Controlador"), text='Kc: ').grid(pady=5, row=11, column=0)
-    entradaKc = CTkEntry(tabview.tab("Controlador"), width=100)
-    entradaKc.insert(0, str(Kc))
-    entradaKc.grid(padx=5, row=11, column=1)
-    entradaKc.bind('<Return>', actualizar_kc)
-
-    CTkLabel(tabview.tab("Controlador"), text='Ki: ').grid(pady=5, row=13, column=0)
-    entradaKi = CTkEntry(tabview.tab("Controlador"), width=100)
-    entradaKi.insert(0, str(Ki))
-    entradaKi.grid(padx=5, row=13, column=1)
-    entradaKi.bind('<Return>', actualizar_ki)
-
-    CTkLabel(tabview.tab("Controlador"), text='Kd: ').grid(pady=5, row=14, column=0)
-    entradaKd = CTkEntry(tabview.tab("Controlador"), width=100)
-    entradaKd.insert(0, str(Kd))
-    entradaKd.grid(padx=5, row=14, column=1)
-    entradaKd.bind('<Return>', actualizar_kd)
-
-    CTkButton(tabview.tab("Controlador"), text='Actualizar Ganancias', width=20, command=actualizar_ganancias).grid(padx=10, pady=10, row=15, column=0, columnspan=2)
-
-    controlAutomatico = BooleanVar(value=True)
-    checkControlAutomatico = CTkSwitch(tabview.tab("Controlador"), text='Control Automático Activo',
-                                        variable=controlAutomatico, command=actualizar_estado_control)
-    checkControlAutomatico.grid(padx=10, pady=10, row=16, column=0, columnspan=2)
-
-    labelCO = CTkLabel(tabview.tab("Controlador"), text='CO: ')
-    entradaCO = CTkEntry(tabview.tab("Controlador"), width=100)
-    entradaCO.bind('<Return>', actualizar_co)
-
-    # tab de comandos para exportar los datos de la simulación
-    CTkButton(tabview.tab("Exportado"), text='Exportar', width=20, command= exportar_datos).grid(column=0, row=4, padx=5, pady=5, columnspan=2)
-
-    formatoExportado = StringVar(value='xlsx')
-    labelFormatoExportado = CTkLabel(tabview.tab("Exportado"), text="Formato de exportado:")
-    labelFormatoExportado.grid(row=0, column=0, columnspan=1, padx=10, pady=10, sticky="")
-    radio_button_1 = CTkRadioButton(tabview.tab("Exportado"), variable=formatoExportado, value='xlsx', text='xlsx')
-    radio_button_1.grid(row=2, column=0, pady=10, padx=20)
-    radio_button_2 = CTkRadioButton(tabview.tab("Exportado"), variable=formatoExportado, value='csv', text='csv')
-    radio_button_2.grid(row=2, column=1, pady=10, padx=20)
-
-    # finalización y barra de estado
-    CTkButton(frameComandos, text='Reiniciar', width=20, command= reiniciar_simulacion).grid(column=0, row=22, padx=5, pady=5)
-    CTkButton(frameComandos, text='Finalizar', width=20, command= finalizar_aplicacion).grid(column=2, row=22, padx=5, pady=5)
-    labelStatus = CTkLabel(frameComandos, text='')
-    labelStatus.grid(column=0, row= 24, columnspan=2)
-
-    ventana.mainloop()
+    simulador = SimuladorControlador()
+    simulador.ejecutar()

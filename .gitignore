@@ -1,4 +1,5 @@
 __pycache__
 .versiones
+.ejecutables
 config.json
 PIDController.py

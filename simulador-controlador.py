@@ -1,7 +1,7 @@
 """
 Nombre: simulador-controlador.py
 Autor: Oscar Franco
-Versión: 5 (2023-01-28)
+Versión: 6 (2023-02-10)
 Descripción: Aplicacióin para simular el comportamiento de un sistema según su función de transferencia
             en lazo abierto o al aplicar un controlador PID
 
@@ -144,6 +144,29 @@ def detener_simulacion():
     entradaTaup.configure(state='normal')
     entradaTd.configure(state='normal')
     CTkButton(tabview.tab("Simulación"), text='Iniciar Simulación', width=200, command=iniciar_simulacion, fg_color='green').grid(padx=10, pady=10, row=4, column=0, columnspan=2)
+
+def reiniciar_simulacion():
+    global tActual, y, co, ysp, t
+
+    tActual = 0
+    y = [y[-1]]
+    co = [co[-1]]
+    ysp = [ysp[-1]]
+    t = [tActual]
+
+    plt.xlim(tActual, tminGrafica+tActual) # ajuste del eje del tiempo
+    yMin = amin([round(amin(y)),round(amin(ysp))])
+    yMax = amax([round(amax(y)),round(amax(ysp))])
+    if yMax == yMin:
+        ax.set_ylim(yMin-1, yMax+1)
+    else:
+        ax.set_ylim(yMin*.95, yMax*1.05)
+    
+    if round(min(co)) == round(max(co)):
+        twax.set_ylim(round(amin(co))-1, round(amax(co))+1)
+    else:
+        twax.set_ylim(round(amin(co))*.95, round(amax(co))*1.05)
+    
 
 # actualiza el valor de Kp desde el campo de entrada
 def actualizar_kp(event=None):
@@ -528,7 +551,8 @@ if __name__ == '__main__':
     radio_button_2.grid(row=2, column=1, pady=10, padx=20)
 
     # finalización y barra de estado
-    CTkButton(frameComandos, text='Finalizar', width=20, command= finalizar_aplicacion).grid(column=1, row=22, padx=5, pady=5)
+    CTkButton(frameComandos, text='Reiniciar', width=20, command= reiniciar_simulacion).grid(column=0, row=22, padx=5, pady=5)
+    CTkButton(frameComandos, text='Finalizar', width=20, command= finalizar_aplicacion).grid(column=2, row=22, padx=5, pady=5)
     labelStatus = CTkLabel(frameComandos, text='')
     labelStatus.grid(column=0, row= 24, columnspan=2)
 

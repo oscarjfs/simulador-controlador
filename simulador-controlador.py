@@ -1,27 +1,24 @@
 """
 Nombre: simulador-controlador.py
 Autor: Oscar Franco
-Versión: 6 (2023-02-10)
-Descripción: Aplicacióin para simular el comportamiento de un sistema según su función de transferencia
+Versión: 6.1 (2023-09-08)
+Descripción: Aplicación para simular el comportamiento de un sistema según su función de transferencia
             en lazo abierto o al aplicar un controlador PID
 
 """
 
-import customtkinter as ctk
 from customtkinter import *
 from tkinter.messagebox import showerror, askyesno
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.ticker import AutoMinorLocator, MultipleLocator
-from numpy import amax, amin
+import numpy as np
 from scipy.integrate import odeint
-from random import gauss
-from math import sqrt
 import datetime
 import json
 from pandas import DataFrame
 
-# cargue de datos desde config.json
+# cargue de configuración desde config.json
 try:
     with open('config.json') as file:
         configuracion = json.load(file)
@@ -155,17 +152,17 @@ def reiniciar_simulacion():
     t = [tActual]
 
     plt.xlim(tActual, tminGrafica+tActual) # ajuste del eje del tiempo
-    yMin = amin([round(amin(y)),round(amin(ysp))])
-    yMax = amax([round(amax(y)),round(amax(ysp))])
+    yMin = np.amin([round(np.amin(y)),round(np.amin(ysp))])
+    yMax = np.amax([round(np.amax(y)),round(np.amax(ysp))])
     if yMax == yMin:
         ax.set_ylim(yMin-1, yMax+1)
     else:
         ax.set_ylim(yMin*.95, yMax*1.05)
     
     if round(min(co)) == round(max(co)):
-        twax.set_ylim(round(amin(co))-1, round(amax(co))+1)
+        twax.set_ylim(round(np.amin(co))-1, round(np.amax(co))+1)
     else:
-        twax.set_ylim(round(amin(co))*.95, round(amax(co))*1.05)
+        twax.set_ylim(round(np.amin(co))*.95, round(np.amax(co))*1.05)
     
 
 # actualiza el valor de Kp desde el campo de entrada
@@ -321,7 +318,7 @@ def simular_sistema():
         except:
             coAtrasado = co0
         y1 = odeint(fopdt,y[-1],ts,args=tuple([coAtrasado]))
-        y.append(float(y1[-1])*gauss(mean,sqrt(variance*ruidoSenalEncendido)))
+        y.append(float(y1[-1][0])*np.random.normal(mean,np.sqrt(variance*ruidoSenalEncendido)))
 
         if controlAutomaticoEncendido:
             ## PID
@@ -347,10 +344,10 @@ def simular_sistema():
         ax.set_xlim(tActual-tminGrafica, tActual)
 
 
-    ax.set_ylim(amin([round(amin(y[-nDatosGrafica:])), round(amin(ysp[-nDatosGrafica:]))])*.95,
-            amax([round(amax(y[-nDatosGrafica:])), round(amax(ysp[-nDatosGrafica:])), 1])*1.05) # ajusta el rango del eje y principal
-    twax.set_ylim(0 if amin(co[-nDatosGrafica:])<0 else round(amin(co[-nDatosGrafica:]))*0.95,
-            1 if amax(co[-nDatosGrafica:])<1 else round(amax(co[-nDatosGrafica:]))*1.05) # ajusta el rango del eje y secundario
+    ax.set_ylim(np.amin([round(np.amin(y[-nDatosGrafica:])), round(np.amin(ysp[-nDatosGrafica:]))])*.95,
+            np.amax([round(np.amax(y[-nDatosGrafica:])), round(np.amax(ysp[-nDatosGrafica:])), 1])*1.05) # ajusta el rango del eje y principal
+    twax.set_ylim(0 if np.amin(co[-nDatosGrafica:])<0 else round(np.amin(co[-nDatosGrafica:]))*0.95,
+            1 if np.amax(co[-nDatosGrafica:])<1 else round(np.amax(co[-nDatosGrafica:]))*1.05) # ajusta el rango del eje y secundario
 
     lineCO, = twax.plot(t, co, color ='purple', linestyle='solid') # crea la línea con los datos
     lineSP, = ax.plot(t, ysp, color ='r', linestyle='solid') # crea la línea con los datos
@@ -444,8 +441,9 @@ if __name__ == '__main__':
 
     ############## GUI
 
-    ctk.set_appearance_mode("System")  # Modes: system (default), light, dark
-    ctk.set_default_color_theme("blue")  # Themes: blue (default), dark-blue, green
+    # Configuración de colores de customtkinter
+    set_appearance_mode("System")  # Modes: system (default), light, dark
+    set_default_color_theme("blue")  # Themes: blue (default), dark-blue, green
 
     ventana = CTk()
     ventana.title('Simulador de Lazos de Control by OF')

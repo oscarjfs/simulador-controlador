@@ -474,7 +474,7 @@ class SimuladorControlador:
     # Exportar datos de la tendencia a CSV/XLSX
     def exportar_datos(self):
         ahora = datetime.datetime.now()
-        nombreArchivo = f'data_{ahora}'.replace(':','_')
+        nombreArchivo = ahora.strftime("data_%Y-%m-%d_%H_%M_%S")
 
         datos = {
             't': self.t,

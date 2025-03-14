@@ -1,7 +1,7 @@
 """
 Nombre: simulador_controlador.py
 Autor: Oscar Franco
-Versión: 8 (2024-10-16)
+Versión: 8.1 (2025-03-15)
 Descripción: Aplicación para simular el comportamiento de un sistema según su función de transferencia
             en lazo abierto o aplicando un controlador PID.
 """
@@ -421,7 +421,7 @@ class SimuladorControlador:
                 sol = solve_ivp(self.fopdt, ts, [self.y[-1]], method='RK45', t_eval=[self.tActual], args=tuple([coAtrasado]))
                 self.y.append(float(sol.y[0][-1]) * np.random.normal(1, np.sqrt(self.variance * self.ruidoSenalEncendido)))
 
-                nuevoCO = self.controller.calculate_CO(self.y[-1], self.ysp[-1], self.co[-1])
+                nuevoCO = self.controller.calculate_CO(self.y[-1], self.ysp[-1], self.co[-1] if self.controlAutomaticoEncendido else self.coActual)
                 self.co.append(nuevoCO)
 
             self.actualizar_grafica()

@@ -3,3 +3,9 @@ __pycache__
 .ejecutables
 config.json
 PIDController.py
+
+.vscode
+build
+dist
+simulador-controlador.spec
+control.ico

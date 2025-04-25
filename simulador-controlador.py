@@ -7,6 +7,7 @@ Descripción: Aplicación para simular el comportamiento de un sistema según su
 """
 
 import json
+import logging
 import datetime
 import numpy as np
 from customtkinter import CTk, CTkButton, CTkEntry, CTkLabel, CTkFrame, CTkTabview, CTkSlider, CTkSwitch, CTkRadioButton, BooleanVar, StringVar, set_appearance_mode, set_default_color_theme
@@ -18,41 +19,31 @@ from scipy.integrate import solve_ivp
 from pandas import DataFrame
 from pyAutoControl.PIDController import PIDController
 
+# Configurar logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 # Clase para manejar la configuración
 class Configuracion:
     CONFIG_FILE = 'config.json'
 
     def __init__(self):
+        logging.info("Cargando configuración...")
         self.configuracion = self.cargar_configuracion()
+        logging.info("Configuración cargada exitosamente.")
 
     def cargar_configuracion(self):
         try:
             with open(self.CONFIG_FILE) as file:
-                return json.load(file)
+                config = json.load(file)
+                logging.info(f"Configuración cargada desde {self.CONFIG_FILE}")
+                return config
         except FileNotFoundError:
+            logging.warning(f"Archivo de configuración {self.CONFIG_FILE} no encontrado. Creando configuración por defecto.")
             self.crear_configuracion_default()
-            with open(self.CONFIG_FILE, 'w') as file:
-                json.dump({
-                    "variance": 5e-09,
-                    "tVel": 50,
-                    "ruidoSenalEncendido": True,
-                    "Ts": 0.1,
-                    "controlAutomaticoEncendido": True,
-                    "tminGrafica": 120,
-                    "Kp": 4.59,
-                    "taup": 15.14,
-                    "td": 5.0,
-                    "Kc": 1.0,
-                    "Ki": 0.0,
-                    "Kd": 0.0,
-                    "y0": 50,
-                    "co0": 50,
-                    "ysp0": 50,
-                    "CO_MIN": 0,
-                    "CO_MAX": 100
-                }, file, indent=4)
             with open(self.CONFIG_FILE) as file:
-                return json.load(file)
+                config = json.load(file)
+                logging.info(f"Configuración por defecto cargada desde {self.CONFIG_FILE}")
+                return config
 
     def crear_configuracion_default(self):
         config_default = {
@@ -76,59 +67,75 @@ class Configuracion:
         }
         with open(self.CONFIG_FILE, 'w') as file:
             json.dump(config_default, file, indent=4)
+        logging.info(f"Configuración por defecto creada y guardada en {self.CONFIG_FILE}")
 
 # Clase para la simulación del controlador PID
 class SimuladorControlador:
     def __init__(self):
+        logging.info("Inicializando SimuladorControlador...")
         self.configuracion_manager = Configuracion()
         self.configuracion = self.configuracion_manager.configuracion
         self.inicializar_parametros()
         self.inicializar_estado_simulacion()
         self.crear_gui()
+        logging.info("SimuladorControlador inicializado exitosamente.")
 
     # Inicialización de parámetros de simulación desde la configuración
     def inicializar_parametros(self):
-        self.variance = self.configuracion['variance']
-        self.tVel = self.configuracion['tVel']
-        self.Ts = self.configuracion['Ts']
-        self.controlAutomaticoEncendido = self.configuracion['controlAutomaticoEncendido']
-        self.tminGrafica = self.configuracion['tminGrafica']
-        self.Kp = self.configuracion['Kp']
-        self.taup = self.configuracion['taup']
-        self.td = self.configuracion['td']
-        self.Kc = self.configuracion['Kc']
-        self.Ki = self.configuracion['Ki']
-        self.Kd = self.configuracion['Kd']
-        self.cambiosParametros=False
-        self.CO_MIN = self.configuracion['CO_MIN']
-        self.CO_MAX = self.configuracion['CO_MAX']
+        logging.info("Inicializando parámetros de simulación...")
+        try:
+            self.variance = self.configuracion['variance']
+            self.tVel = self.configuracion['tVel']
+            self.Ts = self.configuracion['Ts']
+            self.controlAutomaticoEncendido = self.configuracion['controlAutomaticoEncendido']
+            self.tminGrafica = self.configuracion['tminGrafica']
+            self.Kp = self.configuracion['Kp']
+            self.taup = self.configuracion['taup']
+            self.td = self.configuracion['td']
+            self.Kc = self.configuracion['Kc']
+            self.Ki = self.configuracion['Ki']
+            self.Kd = self.configuracion['Kd']
+            self.cambiosParametros=False
+            self.CO_MIN = self.configuracion['CO_MIN']
+            self.CO_MAX = self.configuracion['CO_MAX']
 
-        self.controller = PIDController(self.Ts, self.Kc, self.Ki, self.Kd, self.CO_MIN, self.CO_MAX)
-        self.controller.set_controller_status(self.controlAutomaticoEncendido)
+            self.controller = PIDController(self.Ts, self.Kc, self.Ki, self.Kd, self.CO_MIN, self.CO_MAX)
+            self.controller.set_controller_status(self.controlAutomaticoEncendido)
+            logging.info("Parámetros de simulación inicializados exitosamente.")
+        except KeyError as e:
+            logging.error(f"Error al inicializar parámetros: Falta la clave {e} en el archivo de configuración.")
+            showerror("Error", f"Error al inicializar parámetros: Falta la clave {e} en el archivo de configuración.")
 
     # Inicializar variables de estado
     def inicializar_estado_simulacion(self):
-        self.tstep = 0
-        self.tActual = 0
-        self.yActual = self.configuracion['y0']
-        self.coActual = self.configuracion['co0']
-        self.yspActual = self.configuracion['ysp0']
-        self.estadoSimulacion = False
-        self.ruidoSenalEncendido = self.configuracion['ruidoSenalEncendido']
+        logging.info("Inicializando variables de estado de simulación...")
+        try:
+            self.tstep = 0
+            self.tActual = 0
+            self.yActual = self.configuracion['y0']
+            self.coActual = self.configuracion['co0']
+            self.yspActual = self.configuracion['ysp0']
+            self.estadoSimulacion = False
+            self.ruidoSenalEncendido = self.configuracion['ruidoSenalEncendido']
 
-        self.t0 = self.tActual
-        self.y0 = self.yActual
-        self.co0 = self.coActual
-        self.ysp0 = self.yspActual
+            self.t0 = self.tActual
+            self.y0 = self.yActual
+            self.co0 = self.coActual
+            self.ysp0 = self.yspActual
 
-        self.t = [self.tActual]
-        self.y = [self.yActual]
-        self.co = [self.coActual]
-        self.ysp = [self.yspActual]
-        self.nDatosGrafica = round(self.tminGrafica / self.Ts)
+            self.t = [self.tActual]
+            self.y = [self.yActual]
+            self.co = [self.coActual]
+            self.ysp = [self.yspActual]
+            self.nDatosGrafica = round(self.tminGrafica / self.Ts)
+            logging.info("Variables de estado de simulación inicializadas exitosamente.")
+        except KeyError as e:
+            logging.error(f"Error al inicializar variables de estado: Falta la clave {e} en el archivo de configuración.")
+            showerror("Error", f"Error al inicializar variables de estado: Falta la clave {e} en el archivo de configuración.")
 
     # GUI principal
     def crear_gui(self):
+        logging.info("Creando la interfaz gráfica...")
         set_appearance_mode("System")
         set_default_color_theme("blue")
 
@@ -140,6 +147,7 @@ class SimuladorControlador:
 
         self.crear_grafica_tendencia()
         self.crear_comandos_gui()
+        logging.info("Interfaz gráfica creada exitosamente.")
 
     # Crear la gráfica de tendencias
     def crear_grafica_tendencia(self):
@@ -371,7 +379,7 @@ class SimuladorControlador:
     # Iniciar simulación
     def iniciar_simulacion(self):
         """Inicia la simulación del sistema."""
-
+        logging.info("Iniciando simulación...")
         self.estadoSimulacion = True
         try:
             if float(self.entradaKp.get()) != self.Kp:
@@ -386,19 +394,24 @@ class SimuladorControlador:
             self.entradaTd.configure(state='disabled')
             self.simulacion_pid()
             self.boton_iniciar.configure(text='Detener', command=self.detener_simulacion, fg_color='red')
-        except ValueError:
+            logging.info("Simulación iniciada exitosamente.")
+        except ValueError as e:
+            logging.error(f"Error al iniciar la simulación: Ingrese un valor numérico válido para Kp, Tau y td. {e}")
             showerror("Error", "Ingrese un valor numérico válido para Kp, Tau y td.")
 
     # Detener los cálculos de la simulación
     def detener_simulacion(self):
+        logging.info("Deteniendo simulación...")
         self.estadoSimulacion = False
         self.entradaKp.configure(state='normal')
         self.entradaTaup.configure(state='normal')
         self.entradaTd.configure(state='normal')
         self.boton_iniciar.configure(text='Iniciar', command=self.iniciar_simulacion, fg_color='green')
+        logging.info("Simulación detenida exitosamente.")
 
     # Reiniciar los cálculos de la simulación
     def reiniciar_simulacion(self):
+        logging.info("Reiniciando simulación...")
         self.tstep = 0
         self.tActual = 0
         self.yActual = self.y[-1]
@@ -416,6 +429,7 @@ class SimuladorControlador:
         self.ysp = [self.yspActual]
 
         self.actualizar_grafica()
+        logging.info("Simulación reiniciada exitosamente.")
 
     # Definición del modelo FOPDT
     def fopdt(self, t, y, co):
@@ -453,6 +467,7 @@ class SimuladorControlador:
                 self.ventana.after(100, self.simulacion_pid)  # Actualización de la gráfica
 
         except Exception as e:
+            logging.error(f"Error durante la simulación: {e}")
             showerror("Error", f"Error durante la simulación: {e}")
 
     # Actualizar la gráfica en tiempo real
@@ -519,10 +534,12 @@ class SimuladorControlador:
             df.to_csv(nombreArchivo + '.csv', decimal=',', sep=';', index=False)
 
         self.labelStatus.configure(text= f'Exportado {ahora}') # mensaje de confirmación del exportado
+        logging.info(f"Datos exportados a {nombreArchivo}.{formato}")
 
     # Función para finalizar la aplicación
     def finalizar_aplicacion(self):
         """Finaliza la aplicación preguntando al usuario."""
+        logging.info("Finalizando aplicación...")
         if askyesno(message='¿Desea salir del simulador?', title='Simulador de Lazos de Control by OF'):
             if self.cambiosParametros:
                 if askyesno(message='¿Desea guardar la confirugación actual?', title='Simulador de Lazos de Control by OF'):
@@ -533,18 +550,22 @@ class SimuladorControlador:
                     self.configuracion['Ki'] = float(self.entradaKi.get())
                     self.configuracion['Kd'] = float(self.entradaKd.get())
 
-                    self.guardar_configuracion()  
+                    self.guardar_configuracion()
 
             self.ventana.quit()
             # self.ventana.destroy()
+            logging.info("Aplicación finalizada exitosamente.")
 
     # Ejecutar la aplicación
     def ejecutar(self):
         """Inicia el loop principal de la interfaz."""
+        logging.info("Iniciando el loop principal de la interfaz...")
         self.ventana.mainloop()
 
 
 # Bloque de ejecución principal
 if __name__ == '__main__':
+    # Configurar logging a nivel INFO
+    logging.basicConfig(level=logging.INFO)
     simulador = SimuladorControlador()
     simulador.ejecutar()

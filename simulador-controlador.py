@@ -1,7 +1,7 @@
 """
 Nombre: simulador_controlador.py
 Autor: Oscar Franco
-Versión: 8.2 (2025-04-11)
+Versión: 8.3 (2025-04-25)
 Descripción: Aplicación para simular el comportamiento de un sistema según su función de transferencia
             en lazo abierto o aplicando un controlador PID.
 """
@@ -18,27 +18,42 @@ from scipy.integrate import solve_ivp
 from pandas import DataFrame
 from pyAutoControl.PIDController import PIDController
 
-# Clase para la simulación del controlador PID
-class SimuladorControlador:
+# Clase para manejar la configuración
+class Configuracion:
     CONFIG_FILE = 'config.json'
 
     def __init__(self):
         self.configuracion = self.cargar_configuracion()
-        self.inicializar_parametros()
-        self.inicializar_estado_simulacion()
-        self.crear_gui()
 
-    # Cargar configuración desde archivo JSON
     def cargar_configuracion(self):
         try:
             with open(self.CONFIG_FILE) as file:
                 return json.load(file)
         except FileNotFoundError:
             self.crear_configuracion_default()
+            with open(self.CONFIG_FILE, 'w') as file:
+                json.dump({
+                    "variance": 5e-09,
+                    "tVel": 50,
+                    "ruidoSenalEncendido": True,
+                    "Ts": 0.1,
+                    "controlAutomaticoEncendido": True,
+                    "tminGrafica": 120,
+                    "Kp": 4.59,
+                    "taup": 15.14,
+                    "td": 5.0,
+                    "Kc": 1.0,
+                    "Ki": 0.0,
+                    "Kd": 0.0,
+                    "y0": 50,
+                    "co0": 50,
+                    "ysp0": 50,
+                    "CO_MIN": 0,
+                    "CO_MAX": 100
+                }, file, indent=4)
             with open(self.CONFIG_FILE) as file:
                 return json.load(file)
 
-    # Crear configuración por defecto si no existe
     def crear_configuracion_default(self):
         config_default = {
             "variance": 5e-09,
@@ -62,23 +77,31 @@ class SimuladorControlador:
         with open(self.CONFIG_FILE, 'w') as file:
             json.dump(config_default, file, indent=4)
 
+# Clase para la simulación del controlador PID
+class SimuladorControlador:
+    def __init__(self):
+        self.configuracion_manager = Configuracion()
+        self.configuracion = self.configuracion_manager.configuracion
+        self.inicializar_parametros()
+        self.inicializar_estado_simulacion()
+        self.crear_gui()
+
     # Inicialización de parámetros de simulación desde la configuración
     def inicializar_parametros(self):
-        config = self.configuracion
-        self.variance = config['variance']
-        self.tVel = config['tVel']
-        self.Ts = config['Ts']
-        self.controlAutomaticoEncendido = config['controlAutomaticoEncendido']
-        self.tminGrafica = config['tminGrafica']
-        self.Kp = config['Kp']
-        self.taup = config['taup']
-        self.td = config['td']
-        self.Kc = config['Kc']
-        self.Ki = config['Ki']
-        self.Kd = config['Kd']
+        self.variance = self.configuracion['variance']
+        self.tVel = self.configuracion['tVel']
+        self.Ts = self.configuracion['Ts']
+        self.controlAutomaticoEncendido = self.configuracion['controlAutomaticoEncendido']
+        self.tminGrafica = self.configuracion['tminGrafica']
+        self.Kp = self.configuracion['Kp']
+        self.taup = self.configuracion['taup']
+        self.td = self.configuracion['td']
+        self.Kc = self.configuracion['Kc']
+        self.Ki = self.configuracion['Ki']
+        self.Kd = self.configuracion['Kd']
         self.cambiosParametros=False
-        self.CO_MIN = config['CO_MIN']
-        self.CO_MAX = config['CO_MAX']
+        self.CO_MIN = self.configuracion['CO_MIN']
+        self.CO_MAX = self.configuracion['CO_MAX']
 
         self.controller = PIDController(self.Ts, self.Kc, self.Ki, self.Kd, self.CO_MIN, self.CO_MAX)
         self.controller.set_controller_status(self.controlAutomaticoEncendido)

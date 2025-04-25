@@ -10,3 +10,6 @@ build
 dist
 simulador-controlador.spec
 control.ico
+
+*.csv
+*.xlsx

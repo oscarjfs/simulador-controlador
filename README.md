@@ -23,6 +23,7 @@ matplotlib>=3.6.3
 numpy>=1.25.1
 pandas>=1.5.2
 scipy>=1.10.0
+openpyxl==3.1.5
 customtkinter==5.0.5
 tk==0.1.0
 ```

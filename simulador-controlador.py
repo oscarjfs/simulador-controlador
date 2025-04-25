@@ -1,7 +1,7 @@
 """
 Nombre: simulador_controlador.py
 Autor: Oscar Franco
-Versión: 8.1 (2025-03-15)
+Versión: 8.2 (2025-04-11)
 Descripción: Aplicación para simular el comportamiento de un sistema según su función de transferencia
             en lazo abierto o aplicando un controlador PID.
 """
@@ -16,7 +16,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.ticker import AutoMinorLocator, MultipleLocator
 from scipy.integrate import solve_ivp
 from pandas import DataFrame
-from PIDController import PIDController
+from pyAutoControl.PIDController import PIDController
 
 # Clase para la simulación del controlador PID
 class SimuladorControlador:

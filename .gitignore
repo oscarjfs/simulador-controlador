@@ -3,6 +3,7 @@ __pycache__
 .ejecutables
 config.json
 PIDController.py
+example.py
 
 .vscode
 build

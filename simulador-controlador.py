@@ -44,6 +44,13 @@ class Configuracion:
                 config = json.load(file)
                 logging.info(f"Configuración por defecto cargada desde {self.CONFIG_FILE}")
                 return config
+        except json.JSONDecodeError:
+            logging.error("Error al decodificar el archivo de configuración. Creando configuración por defecto.")
+            self.crear_configuracion_default()
+            with open(self.CONFIG_FILE) as file:
+                config = json.load(file)
+                logging.info(f"Configuración por defecto cargada desde {self.CONFIG_FILE}")
+                return config
     
     def crear_configuracion_default(self):
         config_default = {
@@ -338,8 +345,9 @@ class SimuladorControlador:
         try:
             self.Kp = float(self.gui.entradaKp.get())
             self.cambiosParametros = True
-        except ValueError:
+        except ValueError as e:
             showerror("Error", "Ingrese un valor numérico válido para Kp.")
+            logging.error(f"Error al actualizar Kp: {e}")
             self.gui.entradaKp.delete(0, "end")
             self.gui.entradaKp.insert(0, str(self.Kp))
     
@@ -500,12 +508,9 @@ class SimuladorControlador:
                 ts = [self.t[-2], self.t[-1]]  # Intervalo de tiempo
                 self.ysp.append(self.yspActual)
                 
-                try:
-                    coAtrasado = self.co[-int(self.td/self.Ts)]  # Control retrasado
-                except:
-                    coAtrasado = self.co0
+                coAtrasado = self.co[-int(self.td/self.Ts)] if len(self.co) > int(self.td/self.Ts) else self.co0
                 
-                sol = solve_ivp(self.fopdt, ts, [self.y[-1]], method='RK45', t_eval=[self.tActual], args=tuple([coAtrasado]))
+                sol = solve_ivp(self.fopdt, ts, [self.y[-1]], method='RK45', t_eval=[self.tActual], args=(coAtrasado,))
                 self.y.append(float(sol.y[0][-1]) * np.random.normal(1, np.sqrt(self.variance * self.ruidoSenalEncendido)))
                 
                 nuevoCO = self.controller.calculate_CO(self.y[-1], self.ysp[-1], self.co[-1] if self.controlAutomaticoEncendido else self.coActual)
@@ -535,12 +540,9 @@ class SimuladorControlador:
         df = DataFrame(datos)
         formato = self.gui.formatoExportado.get()
         
-        # exportar datos a excel
         if formato == 'xlsx':
             df.to_excel(nombreArchivo + '.xlsx', index=False)
-        
-        # exportar datos a csv
-        if formato == 'csv':
+        elif formato == 'csv':
             df.to_csv(nombreArchivo + '.csv', decimal=',', sep=';', index=False)
         
         self.gui.labelStatus.configure(text=f'Exportado {ahora}')  # mensaje de confirmación del exportado

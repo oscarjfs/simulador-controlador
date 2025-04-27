@@ -89,8 +89,9 @@ class GUI:
         self.simulador = simulador
         self.config = simulador.configuracion
         self.crear_gui()
-    
+
     def crear_gui(self):
+        """Crea la ventana principal de la interfaz gráfica y sus componentes."""
         logging.info("Creando la interfaz gráfica...")
         set_appearance_mode("System")
         set_default_color_theme("blue")
@@ -105,8 +106,9 @@ class GUI:
         self.crear_comandos_gui()
         
         logging.info("Interfaz gráfica creada exitosamente.")
-    
+
     def crear_grafica_tendencia(self):
+        """Crea y configura la figura y ejes para la gráfica de tendencia."""
         self.fig, self.ax = plt.subplots(facecolor='grey')
         plt.title("Gráfica de Tendencia", color='black', size=16)
         self.ax.set_facecolor('black')
@@ -123,14 +125,25 @@ class GUI:
         self.twax.set_ylabel('CO [%]', color='purple')
         self.twax.set_ylim(0, 100)
         self.twax.tick_params(direction='out', length=6, width=1, colors='purple')
-        
+
+        # Crear las líneas de la gráfica y almacenar sus referencias
+        self.line_y, = self.ax.plot([], [], color='b', label='Y', linestyle='solid')
+        self.line_ysp, = self.ax.plot([], [], color='r', label='Ysp', linestyle='dashed')
+        self.line_co, = self.twax.plot([], [], color='purple', label='CO', linestyle='solid')
+
+        # Configurar la leyenda inicial
+        handles1, labels1 = self.ax.get_legend_handles_labels()
+        handles2, labels2 = self.twax.get_legend_handles_labels()
+        self.ax.legend(handles1 + handles2, labels1 + labels2, loc='upper right')
+
         self.frameGrafico = CTkFrame(self.ventana)
         self.frameGrafico.pack(side="left", expand=True, fill='both')
-        
+
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.frameGrafico)
         self.canvas.get_tk_widget().pack(expand=True, padx=10, pady=10, fill='both')
-    
+
     def crear_comandos_gui(self):
+        """Crea el frame para los comandos y la vista de pestañas."""
         self.frameComandos = CTkFrame(self.ventana)
         self.frameComandos.pack(side="right", fill='y')
         
@@ -157,9 +170,10 @@ class GUI:
         
         self.labelStatus = CTkLabel(self.frameComandos, text='')
         self.labelStatus.grid(column=0, row=24, columnspan=2)
-    
+
     def crear_tab_simulacion(self):
-        CTkLabel(self.tabview.tab("Simulación"), text='PARÁMETROS DEL SISTEMA', 
+        """Crea los elementos de la pestaña 'Simulación'."""
+        CTkLabel(self.tabview.tab("Simulación"), text='PARÁMETROS DEL SISTEMA',
                 font=('Verdana', 14, 'bold')).grid(padx=10, pady=10, row=0, column=0, columnspan=3)
         
         self.entradaKp = self.crear_parametro_input(self.tabview.tab("Simulación"), 'Kp', 
@@ -182,9 +196,10 @@ class GUI:
         self.checkSimularRuido = CTkSwitch(self.tabview.tab("Simulación"), text='Simulación de Señal Ruidosa',
                                           variable=self.simularRuido, command=self.simulador.actualizar_estado_ruido)
         self.checkSimularRuido.grid(padx=10, pady=10, row=20, column=0, columnspan=2)
-    
+
     def crear_tab_controlador(self):
-        self.entradaSetPoint = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Set point', 
+        """Crea los elementos de la pestaña 'Controlador'."""
+        self.entradaSetPoint = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Set point',
                                                         self.simulador.yspActual, 7, self.simulador.actualizar_sp)
         
         CTkButton(self.tabview.tab("Controlador"), text='Actualizar SP', width=20, 
@@ -213,9 +228,10 @@ class GUI:
         self.labelCO = CTkLabel(self.tabview.tab("Controlador"), text='CO: ')
         self.entradaCO = CTkEntry(self.tabview.tab("Controlador"), width=100)
         self.entradaCO.bind('<Return>', self.simulador.actualizar_co)
-    
+
     def crear_tab_exportado(self):
-        CTkButton(self.tabview.tab("Exportado"), text='Exportar', width=20, 
+        """Crea los elementos de la pestaña 'Exportado'."""
+        CTkButton(self.tabview.tab("Exportado"), text='Exportar', width=20,
                  command=self.simulador.exportar_datos).grid(column=0, row=4, padx=5, pady=5, columnspan=2)
         
         self.formatoExportado = StringVar(value='xlsx')
@@ -226,8 +242,9 @@ class GUI:
         
         CTkRadioButton(self.tabview.tab("Exportado"), variable=self.formatoExportado, 
                       value='csv', text='csv').grid(row=2, column=1, pady=10, padx=20)
-    
+
     def crear_parametro_input(self, parent, label, def_value, row, command):
+        """Crea un par de Label y Entry para un parámetro de entrada."""
         CTkLabel(parent, text=f'{label}: ').grid(pady=5, row=row, column=0)
         entrada = CTkEntry(parent, width=100)
         entrada.insert(0, str(def_value))
@@ -237,42 +254,42 @@ class GUI:
     
     def actualizar_grafica(self, t, y, ysp, co, tActual, tminGrafica, nDatosGrafica):
         """Actualiza la gráfica de tendencia con los nuevos valores."""
-        self.ax.cla()
-        self.twax.cla()
-        
-        self.ax.grid(axis='x', color='gray', linestyle='dashed')
-        self.ax.yaxis.set_minor_locator(AutoMinorLocator(5))
-        self.ax.yaxis.set_major_locator(MultipleLocator(1))
-        self.ax.xaxis.set_minor_locator(AutoMinorLocator(10))
-        self.ax.xaxis.grid(which='minor', linestyle='dotted', color='gray')
-        self.ax.tick_params(direction='out', colors='w', grid_color='w', grid_alpha=0.3)
-        self.twax.yaxis.set_minor_locator(AutoMinorLocator(10))
-        
-        self.ax.plot(t, y, color='b', label='Y', linestyle='solid')
-        self.ax.plot(t, ysp, color='r', label='Ysp', linestyle='dashed')
-        self.twax.plot(t, co, color='purple', label='CO', linestyle='solid')
-        
-        handles1, labels1 = self.ax.get_legend_handles_labels()
-        handles2, labels2 = self.twax.get_legend_handles_labels()
-        self.ax.legend(handles1 + handles2, labels1 + labels2, loc='upper right')
-        
-        self.ax.set_xlabel("t [s]", color='black')
-        self.ax.set_ylabel("y", color='blue')
-        self.twax.set_ylabel('CO [%]', color='purple')
-        
+        # Actualizar los datos de las líneas existentes
+        self.line_y.set_data(t, y)
+        self.line_ysp.set_data(t, ysp)
+        self.line_co.set_data(t, co)
+
+        # Ajustar los límites del eje X
         if tActual <= tminGrafica:
             self.ax.set_xlim(0, tminGrafica)
         else:
-            self.ax.set_xlim(tActual-tminGrafica, tActual)
-        
-        self.ax.set_ylim(np.amin([round(np.amin(y[-nDatosGrafica:])), round(np.amin(ysp[-nDatosGrafica:]))])*0.95,
-                        np.amax([round(np.amax(y[-nDatosGrafica:])), round(np.amax(ysp[-nDatosGrafica:])), 1])*1.05)
-        
-        self.twax.set_ylim(0 if np.amin(co[-nDatosGrafica:])<0 else round(np.amin(co[-nDatosGrafica:]))*0.95,
-                          1 if np.amax(co[-nDatosGrafica:])<1 else round(np.amax(co[-nDatosGrafica:]))*1.05)
-        
+            self.ax.set_xlim(tActual - tminGrafica, tActual)
+
+        # Ajustar los límites del eje Y principal (y, ysp)
+        # Considerar solo los datos dentro de la ventana visible
+        t_visible_indices = [i for i, time in enumerate(t) if time >= self.ax.get_xlim()[0] and time <= self.ax.get_xlim()[1]]
+        if t_visible_indices:
+            y_visible = [y[i] for i in t_visible_indices]
+            ysp_visible = [ysp[i] for i in t_visible_indices]
+            y_min = np.amin([np.amin(y_visible), np.amin(ysp_visible)])
+            y_max = np.amax([np.amax(y_visible), np.amax(ysp_visible), 1]) # Asegurar un límite superior mínimo de 1
+            self.ax.set_ylim(y_min * 0.95, y_max * 1.05)
+        else:
+             self.ax.set_ylim(0, 100) # Límites por defecto si no hay datos visibles
+
+        # Ajustar los límites del eje Y secundario (co)
+        if t_visible_indices:
+            co_visible = [co[i] for i in t_visible_indices]
+            co_min = np.amin(co_visible)
+            co_max = np.amax(co_visible)
+            self.twax.set_ylim(0 if co_min < 0 else co_min * 0.95,
+                               1 if co_max < 1 else co_max * 1.05)
+        else:
+            self.twax.set_ylim(0, 100) # Límites por defecto si no hay datos visibles
+
+        # Redibujar el canvas
         self.canvas.draw()
-    
+
     def ejecutar(self):
         """Inicia el loop principal de la interfaz."""
         logging.info("Iniciando el loop principal de la interfaz...")
@@ -281,6 +298,7 @@ class GUI:
 # Clase para la simulación del controlador PID
 class SimuladorControlador:
     def __init__(self):
+        """Inicializa el simulador, carga la configuración y crea la GUI."""
         logging.info("Inicializando SimuladorControlador...")
         self.configuracion_manager = Configuracion()
         self.configuracion = self.configuracion_manager.configuracion
@@ -291,6 +309,7 @@ class SimuladorControlador:
     
     # Inicialización de parámetros de simulación desde la configuración
     def inicializar_parametros(self):
+        """Inicializa los parámetros de simulación a partir de la configuración cargada."""
         logging.info("Inicializando parámetros de simulación...")
         try:
             self.variance = self.configuracion['variance']
@@ -316,6 +335,7 @@ class SimuladorControlador:
     
     # Inicializar variables de estado
     def inicializar_estado_simulacion(self):
+        """Inicializa las variables de estado de la simulación."""
         logging.info("Inicializando variables de estado de simulación...")
         try:
             self.tstep = 0
@@ -338,51 +358,56 @@ class SimuladorControlador:
         except KeyError as e:
             logging.error(f"Error al inicializar variables de estado: Falta la clave {e} en el archivo de configuración.")
             showerror("Error", f"Error al inicializar variables de estado: Falta la clave {e} en el archivo de configuración.")
-    
+
     # Actualizaciones de parámetros
+    def _actualizar_parametro_gui(self, entrada_gui, nombre_parametro, tipo_dato, callback_actualizar, event=None):
+        """Función auxiliar para validar y actualizar parámetros desde entradas de la GUI."""
+        try:
+            valor = tipo_dato(entrada_gui.get())
+            callback_actualizar(valor)
+            self.cambiosParametros = True
+        except ValueError:
+            showerror("Error", f"Ingrese un valor numérico válido para {nombre_parametro}.")
+            entrada_gui.delete(0, "end")
+            # Restaurar el valor anterior si la conversión falla
+            if nombre_parametro == 'Kp':
+                entrada_gui.insert(0, str(self.Kp))
+            elif nombre_parametro == 'Tau':
+                entrada_gui.insert(0, str(self.taup))
+            elif nombre_parametro == 'td':
+                entrada_gui.insert(0, str(self.td))
+            elif nombre_parametro == 'Set point':
+                 entrada_gui.insert(0, str(self.yspActual))
+            elif nombre_parametro == 'CO':
+                 entrada_gui.insert(0, str(self.coActual))
+            # Para ganancias (Kc, Ki, Kd) se maneja en actualizar_ganancias
+
     def actualizar_kp(self, event=None):
         """Actualiza el valor de Kp basado en la entrada del usuario."""
-        try:
-            self.Kp = float(self.gui.entradaKp.get())
-            self.cambiosParametros = True
-        except ValueError as e:
-            showerror("Error", "Ingrese un valor numérico válido para Kp.")
-            logging.error(f"Error al actualizar Kp: {e}")
-            self.gui.entradaKp.delete(0, "end")
-            self.gui.entradaKp.insert(0, str(self.Kp))
-    
+        self._actualizar_parametro_gui(self.gui.entradaKp, 'Kp', float, lambda val: setattr(self, 'Kp', val), event)
+
     def actualizar_taup(self, event=None):
         """Actualiza el valor de Taup basado en la entrada del usuario."""
-        try:
-            self.taup = float(self.gui.entradaTaup.get())
-            self.cambiosParametros = True
-        except ValueError:
-            showerror("Error", "Ingrese un valor numérico válido para Taup.")
-            self.gui.entradaTaup.delete(0, "end")
-            self.gui.entradaTaup.insert(0, str(self.taup))
-    
+        self._actualizar_parametro_gui(self.gui.entradaTaup, 'Tau', float, lambda val: setattr(self, 'taup', val), event)
+
     def actualizar_td(self, event=None):
         """Actualiza el valor de Td basado en la entrada del usuario."""
-        try:
-            self.td = float(self.gui.entradaTd.get())
-            self.cambiosParametros = True
-        except ValueError:
-            showerror("Error", "Ingrese un valor numérico válido para Td.")
-            self.gui.entradaTd.delete(0, "end")
-            self.gui.entradaTd.insert(0, str(self.td))
-    
+        self._actualizar_parametro_gui(self.gui.entradaTd, 'td', float, lambda val: setattr(self, 'td', val), event)
+
     def actualizar_sp(self, event=None):
+        """Actualiza el valor del set point (ysp) basado en la entrada del usuario."""
         try:
             self.yspActual = float(self.gui.entradaSetPoint.get())
             self.tstep = self.tActual
             self.co0 = self.co[-1]
             self.y0 = self.y[-1]
-        except:
+        except ValueError:
             showerror("Error", "Ingrese un valor numérico válido para el set point.")
             self.gui.entradaSetPoint.delete(0, "end")
             self.gui.entradaSetPoint.insert(0, str(self.yspActual))
-    
+
     def actualizar_ganancias(self, event=None):
+        """Actualiza las ganancias del controlador (Kc, Ki, Kd) basado en la entrada del usuario."""
         try:
             self.Kc = float(self.gui.entradaKc.get())
             self.Ki = float(self.gui.entradaKi.get())
@@ -397,8 +422,9 @@ class SimuladorControlador:
             self.gui.entradaKi.insert(0, str(self.Ki))
             self.gui.entradaKd.delete(0, "end")
             self.gui.entradaKd.insert(0, str(self.Kd))
-    
+
     def actualizar_estado_control(self):
+        """Actualiza el estado del control automático (encendido/apagado)."""
         self.controlAutomaticoEncendido = self.gui.controlAutomatico.get()
         self.controller.set_controller_status(self.controlAutomaticoEncendido)
         
@@ -411,20 +437,21 @@ class SimuladorControlador:
             self.gui.entradaCO.delete(0, "end")
             self.coActual = self.co[-1]
             self.gui.entradaCO.insert(0, str(round(self.coActual, 1)))
-    
+
     def actualizar_co(self, event=None):
-        """Actualiza el valor de CO basado en la entrada del usuario."""
+        """Actualiza el valor de CO (Control Output) basado en la entrada del usuario."""
         try:
             self.coActual = float(self.gui.entradaCO.get())
             self.tstep = self.tActual
             self.co0 = self.co[-1]
             self.y0 = self.y[-1]
-        except:
+        except ValueError:
             showerror("Error", "Ingrese un valor numérico válido para CO.")
             self.gui.entradaCO.delete(0, "end")
             self.gui.entradaCO.insert(0, str(self.coActual))
-    
+
     def actualizar_velocidad(self, event=None):
+        """Actualiza la velocidad de simulación basada en el valor del slider."""
         nuevaVelocidad = round(self.gui.scaleVelocidad.get(), -1)
         if nuevaVelocidad < 1:
             self.gui.scaleVelocidad.set(1)
@@ -432,8 +459,9 @@ class SimuladorControlador:
         else:
             self.gui.scaleVelocidad.set(nuevaVelocidad)
             self.tVel = int(nuevaVelocidad)
-    
+
     def actualizar_estado_ruido(self):
+        """Actualiza el estado de la simulación de ruido (encendido/apagado)."""
         self.ruidoSenalEncendido = self.gui.simularRuido.get()
     
     # Iniciar simulación
@@ -494,6 +522,7 @@ class SimuladorControlador:
     
     # Definición del modelo FOPDT
     def fopdt(self, t, y, co):
+        """Define la ecuación diferencial del modelo FOPDT."""
         u = 0 if t < self.td + self.tstep else 1
         dydt = -(y - self.y0) / self.taup + self.Kp / self.taup * u * (co - self.co0)
         return dydt
@@ -567,7 +596,7 @@ class SimuladorControlador:
     
     # Ejecutar la aplicación
     def ejecutar(self):
-        """Inicia el loop principal de la interfaz."""
+        """Inicia el loop principal de la interfaz gráfica."""
         self.gui.ejecutar()
 
 # Bloque de ejecución principal

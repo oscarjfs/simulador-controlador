@@ -1,12 +1,4 @@
-"""
-Nombre: simulador_controlador.py
-Autor: Oscar Franco
-Versión: 8.4 (2025-04-26)
-Descripción: Aplicación para simular el comportamiento de un sistema según su función de transferencia
-en lazo abierto o aplicando un controlador PID.
-"""
-
-import json
+import yaml
 import logging
 import datetime
 import numpy as np
@@ -24,7 +16,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Clase para manejar la configuración
 class Configuracion:
-    CONFIG_FILE = 'config.json'
+    CONFIG_FILE = 'config.yml'
     
     def __init__(self):
         logging.info("Cargando configuración...")
@@ -33,24 +25,18 @@ class Configuracion:
         
     def cargar_configuracion(self):
         try:
-            with open(self.CONFIG_FILE) as file:
-                config = json.load(file)
+            with open(self.CONFIG_FILE, 'r') as file:
+                # yaml.safe_load es la opción segura para cargar archivos YAML
+                config = yaml.safe_load(file)
+                if config is None:
+                    raise ValueError("Archivo vacío")
                 logging.info(f"Configuración cargada desde {self.CONFIG_FILE}")
                 return config
-        except FileNotFoundError:
-            logging.warning(f"Archivo de configuración {self.CONFIG_FILE} no encontrado. Creando configuración por defecto.")
+        except (FileNotFoundError, yaml.YAMLError, ValueError):
+            logging.warning(f"Archivo {self.CONFIG_FILE} no válido o no encontrado. Generando default.")
             self.crear_configuracion_default()
-            with open(self.CONFIG_FILE) as file:
-                config = json.load(file)
-                logging.info(f"Configuración por defecto cargada desde {self.CONFIG_FILE}")
-                return config
-        except json.JSONDecodeError:
-            logging.error("Error al decodificar el archivo de configuración. Creando configuración por defecto.")
-            self.crear_configuracion_default()
-            with open(self.CONFIG_FILE) as file:
-                config = json.load(file)
-                logging.info(f"Configuración por defecto cargada desde {self.CONFIG_FILE}")
-                return config
+            with open(self.CONFIG_FILE, 'r') as file:
+                return yaml.safe_load(file)
     
     def crear_configuracion_default(self):
         config_default = {
@@ -74,13 +60,13 @@ class Configuracion:
         }
         
         with open(self.CONFIG_FILE, 'w') as file:
-            json.dump(config_default, file, indent=4)
+            yaml.dump(config_default, file, default_flow_style=False)
             logging.info(f"Configuración por defecto creada y guardada en {self.CONFIG_FILE}")
     
     def guardar_configuracion(self, nueva_config):
-        """Guarda los cambios de configuración en el archivo JSON."""
+        """Guarda los cambios de configuración en el archivo YAML."""
         with open(self.CONFIG_FILE, 'w') as file:
-            json.dump(nueva_config, file, indent=4)
+            yaml.dump(nueva_config, file, default_flow_style=False)
             logging.info(f"Configuración actualizada y guardada en {self.CONFIG_FILE}")
 
 # Clase para la interfaz gráfica

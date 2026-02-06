@@ -2,6 +2,7 @@ __pycache__
 .versiones
 .ejecutables
 config.json
+config.yml
 example.py
 
 pyAutoControl/

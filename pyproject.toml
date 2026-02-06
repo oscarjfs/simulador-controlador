@@ -1,0 +1,15 @@
+[project]
+name = "simulador-controlador"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "customtkinter==5.2.2",
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.2",
+    "openpyxl>=3.1.5",
+    "pandas>=3.0.0",
+    "scipy>=1.17.0",
+    "tk==0.1.0",
+]

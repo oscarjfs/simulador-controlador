@@ -2,8 +2,10 @@ __pycache__
 .versiones
 .ejecutables
 config.json
-PIDController.py
 example.py
+
+pyAutoControl/
+.venv/
 
 .vscode
 build

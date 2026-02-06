@@ -598,10 +598,3 @@ class SimuladorControlador:
     def ejecutar(self):
         """Inicia el loop principal de la interfaz gráfica."""
         self.gui.ejecutar()
-
-# Bloque de ejecución principal
-if __name__ == '__main__':
-    # Configurar logging a nivel INFO
-    logging.basicConfig(level=logging.INFO)
-    simulador = SimuladorControlador()
-    simulador.ejecutar()

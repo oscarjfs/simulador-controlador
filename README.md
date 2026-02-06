@@ -20,11 +20,12 @@ Las librerias que se requieren para su funcionamiento:
 
 ```
 matplotlib>=3.6.3
-numpy>=1.25.1
-pandas>=1.5.2
-scipy>=1.10.0
-openpyxl==3.1.5
-customtkinter==5.0.5
+customtkinter==5.2.2
+matplotlib>=3.10.8
+numpy>=2.4.2
+pandas>=3.0.0
+openpyxl>=3.1.5
+scipy>=1.17.0
 tk==0.1.0
 ```
 
@@ -34,12 +35,17 @@ https://github.com/oscarjfs/pyAutoControl
 
 ### Installing
 
+Clone el repositorio
+
+```
+git clone https://github.com/oscarjfs/simulador-controlador.git
+```
+
 Instale las librerías corresponientes.
 ```
 pip install -r requirements.txt
 ```
 
-Descargue el archivo simulador-controlador.py y ejecute.
 
 También puede descargar la versión ejecutable creada con pyinstaller.
 https://github.com/oscarjfs/simulador-controlador/releases
@@ -50,5 +56,5 @@ https://github.com/oscarjfs/simulador-controlador/releases
 Ejecute en consola:
 
 ```
-python simulador-contrtolador.py
+python main.py
 ```

@@ -4,6 +4,7 @@ __pycache__
 config.json
 config.yml
 example.py
+test.py
 
 pyAutoControl/
 .venv/

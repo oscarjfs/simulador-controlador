@@ -1,0 +1,11 @@
+CO_MAX: 100
+CO_MIN: 0
+Kc: 1.0
+Kd: 0.0
+Ki: 0.0
+Ts: 0.1
+controlAutomaticoEncendido: true
+ruidoSenalEncendido: true
+tVel: 50
+tminGrafica: 120
+variance: 5.0e-09

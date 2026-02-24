@@ -193,13 +193,13 @@ class GUI:
                                      command=self.simulador.cambiar_sistema_simulado, variable=self.sistemaSeleccionado)
         self.comboboxSistema.grid(padx=10, pady=10, row=1, column=0, columnspan=3)
         
-        self.entradaKp = self.crear_parametro_input(self.tabview.tab("Simulación"), 'Kp', 
+        self.etiquetaKp, self.entradaKp = self.crear_parametro_input(self.tabview.tab("Simulación"), 'Kp', 
                                                    self.simulador.Kp, 2, self.simulador.actualizar_kp)
         
-        self.entradaTaup = self.crear_parametro_input(self.tabview.tab("Simulación"), 'Tau', 
+        self.etiquetaTaup, self.entradaTaup = self.crear_parametro_input(self.tabview.tab("Simulación"), 'Tau', 
                                                      self.simulador.taup, 3, self.simulador.actualizar_taup)
         
-        self.entradaTd = self.crear_parametro_input(self.tabview.tab("Simulación"), 'td', 
+        self.etiquetaTd, self.entradaTd = self.crear_parametro_input(self.tabview.tab("Simulación"), 'td', 
                                                    self.simulador.td, 4, self.simulador.actualizar_td)
         
         CTkLabel(self.tabview.tab("Simulación"), text='Velocidad de simulación:').grid(column=0, row=18)
@@ -216,7 +216,7 @@ class GUI:
 
     def crear_tab_controlador(self):
         """Crea los elementos de la pestaña 'Controlador'."""
-        self.entradaSetPoint = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Set point',
+        _, self.entradaSetPoint = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Set point',
                                                         self.simulador.yspActual, 7, self.simulador.actualizar_sp)
         
         CTkButton(self.tabview.tab("Controlador"), text='Actualizar SP', width=20, 
@@ -225,13 +225,13 @@ class GUI:
         CTkLabel(self.tabview.tab("Controlador"), text='GANANCIAS DEL CONTROLADOR', 
                 font=('Verdana', 14, 'bold')).grid(padx=10, pady=10, row=10, column=0, columnspan=2)
         
-        self.entradaKc = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Kc', 
+        _, self.entradaKc = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Kc', 
                                                    self.simulador.Kc, 11, self.simulador.actualizar_ganancias)
         
-        self.entradaKi = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Ki', 
+        _, self.entradaKi = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Ki', 
                                                    self.simulador.Ki, 13, self.simulador.actualizar_ganancias)
         
-        self.entradaKd = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Kd', 
+        _, self.entradaKd = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Kd', 
                                                    self.simulador.Kd, 14, self.simulador.actualizar_ganancias)
         
         CTkButton(self.tabview.tab("Controlador"), text='Actualizar Ganancias', width=20, 
@@ -262,12 +262,13 @@ class GUI:
 
     def crear_parametro_input(self, parent, label, def_value, row, command):
         """Crea un par de Label y Entry para un parámetro de entrada."""
-        CTkLabel(parent, text=f'{label}: ').grid(pady=5, row=row, column=0)
+        etiqueta = CTkLabel(parent, text=f'{label}: ')
+        etiqueta.grid(pady=5, row=row, column=0)
         entrada = CTkEntry(parent, width=100)
         entrada.insert(0, str(def_value))
         entrada.grid(padx=5, row=row, column=1)
         entrada.bind('<Return>', command)
-        return entrada
+        return etiqueta, entrada
     
     def actualizar_grafica(self, t, y, ysp, co, tActual, tminGrafica, nDatosGrafica):
         """Actualiza la gráfica de tendencia con los nuevos valores."""
@@ -404,20 +405,27 @@ class SimuladorControlador:
         self.reestablecer_caracteristicas_proceso_gui()
         self.reestablecer_entradas_proceso_gui()
 
-        ## TODO: Pendiente hacer que las etiquetas de entrada se oculten cuando se seleccionen procesos diferentes a personalizados
-
         es_personalizado = self.sistemaSeleccionado == 'Personalizado'
         if es_personalizado:
             self.gui.entradaKp.configure(state='normal')
             self.gui.entradaTaup.configure(state='normal')
             self.gui.entradaTd.configure(state='normal')
+            self.gui.etiquetaKp.grid()
+            self.gui.etiquetaTaup.grid()
+            self.gui.etiquetaTd.grid()
+            self.gui.entradaKp.grid()
+            self.gui.entradaTaup.grid()
+            self.gui.entradaTd.grid()
         else:
             self.gui.entradaKp.configure(state='disabled')
             self.gui.entradaTaup.configure(state='disabled')
             self.gui.entradaTd.configure(state='disabled')
-            self.gui.entradaKp.grid_forget()
-            self.gui.entradaTaup.grid_forget()
-            self.gui.entradaTd.grid_forget()
+            self.gui.etiquetaKp.grid_remove()
+            self.gui.etiquetaTaup.grid_remove()
+            self.gui.etiquetaTd.grid_remove()
+            self.gui.entradaKp.grid_remove()
+            self.gui.entradaTaup.grid_remove()
+            self.gui.entradaTd.grid_remove()
     
     def _actualizar_parametro_gui(self, entrada_gui, nombre_parametro, tipo_dato, callback_actualizar, event=None):
         """Función auxiliar para validar y actualizar parámetros desde entradas de la GUI."""

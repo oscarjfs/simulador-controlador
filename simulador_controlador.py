@@ -546,7 +546,7 @@ class SimuladorControlador:
             self.gui.entradaKp.configure(state='disabled')
             self.gui.entradaTaup.configure(state='disabled')
             self.gui.entradaTd.configure(state='disabled')
-            self.gui.comboboxSistema.configure(state='disable')
+            self.gui.comboboxSistema.configure(state='disabled')
             
             self.simulacion_pid()
             

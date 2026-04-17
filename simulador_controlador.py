@@ -287,7 +287,7 @@ class GUI:
             ysp_visible = [ysp[i] for i in t_visible_indices]
             y_min = np.amin([np.amin(y_visible), np.amin(ysp_visible)])
             y_max = np.amax([np.amax(y_visible), np.amax(ysp_visible), 1])
-            self.ax.set_ylim(y_min * 0.95, y_max * 1.05)
+            self.ax.set_ylim(min(y_min * 0.95, y_min - 1.0), max(y_max * 1.05, y_max + 1.0))
         else:
              self.ax.set_ylim(0, 100)
 

@@ -1,7 +1,7 @@
 Personalizado:
-  Kp: 4.59
-  taup: 15.14
-  td: 5.0
+  Kp: 1.0
+  taup: 1.0
+  td: 0.0
   y0: 50
   ysp0: 50
   co0: 50
@@ -12,28 +12,36 @@ Flujo Aire Secador:
   td: 5.0
   y0: 50
   ysp0: 50
-  co0: 50
+  co0: 20
 
 Intercambiador de Calor:
-  Kp: 4.59
-  taup: 15.14
-  td: 1.0
+  Kp: 2.5
+  taup: 120
+  td: 15.0
   y0: 70
   ysp0: 70
   co0: 50
 
 Nivel por Gravedad:
-  Kp: 1
-  taup: 1
-  td: 0.0
+  Kp: 1.2
+  taup: 60.0
+  td: 3.0
   y0: 50
   ysp0: 50
-  co0: 50
+  co0: 35
 
-Inverso:
-  Kp: -1
-  taup: 1
-  td: 0.0
-  y0: 50
-  ysp0: 50
-  co0: 50
+Tanque Presurizado:
+  Kp: 0.5
+  taup: 15.0
+  td: 0.5
+  y0: 10
+  ysp0: 10
+  co0: 40
+
+pH en Reactor:
+  Kp: 25.0
+  taup: 300.0
+  td: 20.0
+  y0: 7
+  ysp0: 7
+  co0: 55

@@ -1,13 +1,15 @@
 import yaml
 import logging
 import datetime
+import threading
+import queue
+from collections import deque
 import numpy as np
 from customtkinter import CTk, CTkButton, CTkEntry, CTkLabel, CTkComboBox, CTkFrame, CTkTabview, CTkSlider, CTkSwitch, CTkRadioButton, BooleanVar, StringVar, set_appearance_mode, set_default_color_theme
 from tkinter.messagebox import showerror, askyesno
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.ticker import AutoMinorLocator, MultipleLocator
-from scipy.integrate import solve_ivp
 from pandas import DataFrame
 from pyAutoControl.PIDController import PIDController
 
@@ -41,7 +43,7 @@ class Configuracion:
     def crear_configuracion_default(self):
         config_default = {
             "variance": 5e-09,
-            "tVel": 50,
+            "tVel": 20,
             "ruidoSenalEncendido": True,
             "Ts": 0.1,
             "controlAutomaticoEncendido": True,
@@ -152,6 +154,13 @@ class GUI:
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.frameGrafico)
         self.canvas.get_tk_widget().pack(expand=True, padx=10, pady=10, fill='both')
+
+        self._blit_background = None
+        self._xlim_prev = None
+        self._ylim_prev = None
+        self._twylim_prev = None
+        self.canvas.draw()
+        self._blit_background = self.canvas.copy_from_bbox(self.fig.bbox)
 
     def crear_comandos_gui(self):
         """Crea el frame para los comandos y la vista de pestañas."""
@@ -271,36 +280,59 @@ class GUI:
         return etiqueta, entrada
     
     def actualizar_grafica(self, t, y, ysp, co, tActual, tminGrafica, nDatosGrafica):
-        """Actualiza la gráfica de tendencia con los nuevos valores."""
-        self.line_y.set_data(t, y)
-        self.line_ysp.set_data(t, ysp)
-        self.line_co.set_data(t, co)
+        """Actualiza la gráfica de tendencia con los nuevos valores usando blitting."""
+        with self.simulador.data_lock:
+            t_arr = np.asarray(t)
+            y_arr = np.asarray(y)
+            ysp_arr = np.asarray(ysp)
+            co_arr = np.asarray(co)
+
+        self.line_y.set_data(t_arr, y_arr)
+        self.line_ysp.set_data(t_arr, ysp_arr)
+        self.line_co.set_data(t_arr, co_arr)
 
         if tActual <= tminGrafica:
-            self.ax.set_xlim(0, tminGrafica)
+            new_xlim = (0, tminGrafica)
         else:
-            self.ax.set_xlim(tActual - tminGrafica, tActual)
+            new_xlim = (tActual - tminGrafica, tActual)
+        self.ax.set_xlim(new_xlim)
 
-        t_visible_indices = [i for i, time in enumerate(t) if time >= self.ax.get_xlim()[0] and time <= self.ax.get_xlim()[1]]
-        if t_visible_indices:
-            y_visible = [y[i] for i in t_visible_indices]
-            ysp_visible = [ysp[i] for i in t_visible_indices]
-            y_min = np.amin([np.amin(y_visible), np.amin(ysp_visible)])
-            y_max = np.amax([np.amax(y_visible), np.amax(ysp_visible), 1])
-            self.ax.set_ylim(min(y_min * 0.95, y_min - 1.0), max(y_max * 1.05, y_max + 1.0))
-        else:
-             self.ax.set_ylim(0, 100)
+        mask = (t_arr >= new_xlim[0]) & (t_arr <= new_xlim[1])
+        if np.any(mask):
+            y_visible = y_arr[mask]
+            ysp_visible = ysp_arr[mask]
+            y_min = min(np.amin(y_visible), np.amin(ysp_visible))
+            y_max = max(np.amax(y_visible), np.amax(ysp_visible), 1)
+            new_ylim = (min(y_min * 0.95, y_min - 1.0), max(y_max * 1.05, y_max + 1.0))
 
-        if t_visible_indices:
-            co_visible = [co[i] for i in t_visible_indices]
+            co_visible = co_arr[mask]
             co_min = np.amin(co_visible)
             co_max = np.amax(co_visible)
-            self.twax.set_ylim(0 if co_min < 0 else co_min * 0.95,
-                               1 if co_max < 1 else co_max * 1.05)
+            new_twylim = (0 if co_min < 0 else co_min * 0.95,
+                          1 if co_max < 1 else co_max * 1.05)
         else:
-            self.twax.set_ylim(0, 100)
+            new_ylim = (0, 100)
+            new_twylim = (0, 100)
 
-        self.canvas.draw()
+        axes_changed = (self._xlim_prev != new_xlim or
+                        self._ylim_prev != new_ylim or
+                        self._twylim_prev != new_twylim)
+
+        self.ax.set_ylim(new_ylim)
+        self.twax.set_ylim(new_twylim)
+
+        if axes_changed or self._blit_background is None:
+            self.canvas.draw()
+            self._blit_background = self.canvas.copy_from_bbox(self.fig.bbox)
+            self._xlim_prev = new_xlim
+            self._ylim_prev = new_ylim
+            self._twylim_prev = new_twylim
+        else:
+            self.canvas.restore_region(self._blit_background)
+            self.ax.draw_artist(self.line_y)
+            self.ax.draw_artist(self.line_ysp)
+            self.twax.draw_artist(self.line_co)
+            self.canvas.blit(self.fig.bbox)
 
     def ejecutar(self):
         """Inicia el loop principal de la interfaz."""
@@ -317,6 +349,10 @@ class SimuladorControlador:
         self.process_names = self.configuracion_manager.process_names
         self.sistemaSeleccionado = self.process_names[0]
         self.estadoSimulacion = False
+        self.data_lock = threading.Lock()
+        self.data_queue = queue.Queue()
+        self.sim_thread = None
+        self._gui_update_pending = False
         self.inicializar_parametros()
         self.inicializar_parametros_controlador()
         self.inicializar_estado_simulacion()
@@ -371,11 +407,13 @@ class SimuladorControlador:
             self.y0 = self.yActual
             self.co0 = self.coActual
             self.ysp0 = self.yspActual
-            self.t = [self.tActual]
-            self.y = [self.yActual]
-            self.co = [self.coActual]
-            self.ysp = [self.yspActual]
+            n_datos_max = max(2 * round(self.tminGrafica / self.Ts), int(self.td / self.Ts) + round(self.tminGrafica / self.Ts)) + 100
+            self.t = deque([self.tActual], maxlen=n_datos_max)
+            self.y = deque([self.yActual], maxlen=n_datos_max)
+            self.co = deque([self.coActual], maxlen=n_datos_max)
+            self.ysp = deque([self.yspActual], maxlen=n_datos_max)
             self.nDatosGrafica = round(self.tminGrafica / self.Ts)
+            self.n_datos_max = n_datos_max
             logging.info("Variables de estado de simulación inicializadas exitosamente.")
         except KeyError as e:
             logging.error(f"Error al inicializar variables de estado: Falta la clave {e} en el archivo de configuración.")
@@ -457,8 +495,28 @@ class SimuladorControlador:
         self._actualizar_parametro_gui(self.gui.entradaTaup, 'Tau', float, lambda val: setattr(self, 'taup', val), event)
 
     def actualizar_td(self, event=None):
-        """Actualiza el valor de Td basado en la entrada del usuario."""
-        self._actualizar_parametro_gui(self.gui.entradaTd, 'td', float, lambda val: setattr(self, 'td', val), event)
+        """Actualiza el valor de Td y redimensiona los buffers de memoria si es necesario."""
+        try:
+            nuevo_td = float(self.gui.entradaTd.get())
+            nuevo_offset = int(nuevo_td / self.Ts)
+            nuevo_n_max = nuevo_offset + self.nDatosGrafica + 100
+            if self.co.maxlen is not None and nuevo_n_max > self.co.maxlen:
+                with self.data_lock:
+                    self.t = deque(self.t, maxlen=nuevo_n_max)
+                    self.y = deque(self.y, maxlen=nuevo_n_max)
+                    self.ysp = deque(self.ysp, maxlen=nuevo_n_max)
+                    self.co = deque(self.co, maxlen=nuevo_n_max)
+                    self.td = nuevo_td
+            else:
+                with self.data_lock:
+                    self.td = nuevo_td
+                    
+            self.cambiosParametros = True
+            
+        except ValueError:
+            showerror("Error", "Ingrese un valor numérico válido para td.")
+            self.gui.entradaTd.delete(0, "end")
+            self.gui.entradaTd.insert(0, str(self.td))
 
     def actualizar_sp(self, event=None):
         """Actualiza el valor del set point (ysp) basado en la entrada del usuario."""
@@ -548,7 +606,10 @@ class SimuladorControlador:
             self.gui.entradaTd.configure(state='disabled')
             self.gui.comboboxSistema.configure(state='disabled')
             
-            self.simulacion_pid()
+            self.sim_thread = threading.Thread(target=self._simulacion_loop, daemon=True)
+            self.sim_thread.start()
+            self._gui_update_pending = False
+            self._programar_consumo_datos()
             
             self.gui.boton_iniciar.configure(text='Detener', command=self.detener_simulacion, fg_color='red')
             
@@ -560,6 +621,9 @@ class SimuladorControlador:
     def detener_simulacion(self):
         logging.info("Deteniendo simulación...")
         self.estadoSimulacion = False
+        if self.sim_thread is not None:
+            self.sim_thread.join(timeout=2.0)
+            self.sim_thread = None
         self.gui.entradaKp.configure(state='normal')
         self.gui.entradaTaup.configure(state='normal')
         self.gui.entradaTd.configure(state='normal')
@@ -583,34 +647,77 @@ class SimuladorControlador:
         dydt = -(y - self.y0) / self.taup + self.Kp / self.taup * u * (co - self.co0)
         return dydt
     
+    def fopdt_euler(self, y_prev, co):
+        """Resuelve un paso del modelo FOPDT usando la solución analítica exacta."""
+        u = 0 if self.tActual < self.td + self.tstep else 1
+        y_eq = self.y0 + self.Kp * u * (co - self.co0)
+        y_next = y_eq + (y_prev - y_eq) * np.exp(-self.Ts / self.taup)
+        return y_next
+    
     def simulacion_pid(self):
-        """Simulación del lazo de control PID."""
+        """Ejecuta un lote de pasos de simulación y envía datos a la queue."""
         try:
             for i in range(self.tVel):
-                self.tActual = self.t[-1] + self.Ts
-                self.t.append(self.tActual)
-                ts = [self.t[-2], self.t[-1]]
-                self.ysp.append(self.yspActual)
-                
-                if self.td <= self.Ts:
-                    coAtrasado = self.co[-1]
-                else:
-                    coAtrasado = self.co[-int(self.td/self.Ts)] if len(self.co) > int(self.td/self.Ts) else self.co0
-                
-                sol = solve_ivp(self.fopdt, ts, [self.y[-1]], method='RK45', t_eval=[self.tActual], args=(coAtrasado,))
-                self.y.append(float(sol.y[0][-1]) * np.random.normal(1, np.sqrt(self.variance * self.ruidoSenalEncendido)))
-                
-                nuevoCO = self.controller.calculate_CO(self.y[-1], self.ysp[-1], self.co[-1] if self.controlAutomaticoEncendido else self.coActual)
-                self.co.append(nuevoCO)
+                with self.data_lock:
+                    self.tActual = self.t[-1] + self.Ts
+                    self.t.append(self.tActual)
+                    self.ysp.append(self.yspActual)
+                    
+                    if self.td <= self.Ts:
+                        coAtrasado = self.co[-1]
+                    else:
+                        offset = int(self.td / self.Ts)
+                        coAtrasado = self.co[-offset] if len(self.co) > offset else self.co0
+                    
+                    y_next = self.fopdt_euler(self.y[-1], coAtrasado)
+                    y_next *= np.random.normal(1, np.sqrt(self.variance * self.ruidoSenalEncendido))
+                    self.y.append(y_next)
+                    
+                    nuevoCO = self.controller.calculate_CO(self.y[-1], self.ysp[-1], self.co[-1] if self.controlAutomaticoEncendido else self.coActual)
+                    self.co.append(nuevoCO)
             
-            self.gui.actualizar_grafica(self.t, self.y, self.ysp, self.co, self.tActual, self.tminGrafica, self.nDatosGrafica)
-            
-            if self.estadoSimulacion:
-                self.gui.ventana.after(100, self.simulacion_pid)
-        
+            self.data_queue.put(('update', None))
         except Exception as e:
-            logging.error(f"Error durante la simulación: {e}")
-            showerror("Error", f"Error durante la simulación: {e}")
+            self.estadoSimulacion = False
+            self.data_queue.put(('error', str(e)))
+
+    def _simulacion_loop(self):
+        """Loop de simulación que se ejecuta en un hilo separado."""
+        while self.estadoSimulacion:
+            t_start = datetime.datetime.now()
+            self.simulacion_pid()
+            elapsed = (datetime.datetime.now() - t_start).total_seconds()
+            sleep_time = max(0.05, 0.1 - elapsed)
+            threading.Event().wait(sleep_time)
+
+    def _programar_consumo_datos(self):
+        """Programa la verificación periódica de datos desde la queue en el hilo GUI."""
+        if not self.estadoSimulacion:
+            return
+
+        if not self.data_queue.empty():
+            msg_type, msg_data = self.data_queue.get_nowait()
+            if msg_type == 'error':
+                self.estadoSimulacion = False
+                showerror("Error", f"Error durante la simulación: {msg_data}")
+                return
+            if not self._gui_update_pending:
+                self._gui_update_pending = True
+                self.gui.ventana.after_idle(self._consumir_y_actualizar)
+
+        while not self.data_queue.empty():
+            try:
+                self.data_queue.get_nowait()
+            except queue.Empty:
+                break
+
+        self.gui.ventana.after(50, self._programar_consumo_datos)
+
+    def _consumir_y_actualizar(self):
+        """Actualiza la gráfica con los datos actuales (se ejecuta en el hilo GUI)."""
+        self._gui_update_pending = False
+        if self.estadoSimulacion:
+            self.gui.actualizar_grafica(self.t, self.y, self.ysp, self.co, self.tActual, self.tminGrafica, self.nDatosGrafica)
     
     def exportar_datos(self):
         """Exporta los datos de la simulación a un archivo csv o xlsx"""
@@ -618,10 +725,10 @@ class SimuladorControlador:
         nombreArchivo = ahora.strftime("data_%Y-%m-%d_%H_%M_%S")
         
         datos = {
-            't': self.t,
-            'CO': self.co,
-            'y': self.y,
-            'ysp': self.ysp
+            't': list(self.t),
+            'CO': list(self.co),
+            'y': list(self.y),
+            'ysp': list(self.ysp)
         }
         
         df = DataFrame(datos)
@@ -639,6 +746,7 @@ class SimuladorControlador:
         """Finaliza la aplicación preguntando al usuario."""
         logging.info("Finalizando aplicación...")
         if askyesno(message='¿Desea salir del simulador?', title='Simulador de Lazos de Control by OF'):
+            self.estadoSimulacion = False
             self.gui.ventana.quit()
             logging.info("Aplicación finalizada exitosamente.")
     

@@ -1,0 +1,27 @@
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    (0,0,0,0),
+    (0,0,0,0),
+    (0,0,0,0),
+    (0,0,0,0)
+  ),
+  kids=[
+    StringFileInfo(
+      [
+        StringTable(
+          u'040904B0',
+          [
+            StringStruct(u'CompanyName', u'OF'),
+            StringStruct(u'FileDescription', u'Simulador de Lazos de Control'),
+            StringStruct(u'FileVersion', u'2.0.0'),
+            StringStruct(u'InternalName', u'simulador-controlador'),
+            StringStruct(u'OriginalFilename', u'simulador-controlador.exe'),
+            StringStruct(u'ProductName', u'Simulador Controlador'),
+            StringStruct(u'ProductVersion', u'2.0.0'),
+          ]
+        )
+      ]
+    ),
+    VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
+  ]
+)

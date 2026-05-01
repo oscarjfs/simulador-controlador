@@ -3,6 +3,8 @@ import logging
 import datetime
 import threading
 import queue
+import sys
+import os
 from collections import deque
 import numpy as np
 from customtkinter import CTk, CTkButton, CTkEntry, CTkLabel, CTkComboBox, CTkFrame, CTkTabview, CTkSlider, CTkSwitch, CTkRadioButton, BooleanVar, StringVar, set_appearance_mode, set_default_color_theme
@@ -19,7 +21,15 @@ class Configuracion:
     """Clase para manejara las configuraciones del simulador"""
     CONFIG_FILE = 'config.yaml'
     PROCESS_FILE = 'process.yaml'
-    
+
+    @staticmethod
+    def get_resource_path(filename):
+        if getattr(sys, 'frozen', False):
+            base_path = os.path.dirname(sys.executable)
+        else:
+            base_path = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(base_path, filename)
+
     def __init__(self):
         logging.info("Cargando configuración...")
         self.configuracion = self.cargar_configuracion()
@@ -27,17 +37,18 @@ class Configuracion:
         logging.info("Configuración cargada exitosamente.")
         
     def cargar_configuracion(self):
+        config_file = self.get_resource_path(self.CONFIG_FILE)
         try:
-            with open(self.CONFIG_FILE, 'r') as file:
+            with open(config_file, 'r') as file:
                 config = yaml.safe_load(file)
                 if config is None:
                     raise ValueError("Archivo vacío")
-                logging.info(f"Configuración cargada desde {self.CONFIG_FILE}")
+                logging.info(f"Configuración cargada desde {config_file}")
                 return config
         except (FileNotFoundError, yaml.YAMLError, ValueError):
-            logging.warning(f"Archivo {self.CONFIG_FILE} no válido o no encontrado. Generando default.")
+            logging.warning(f"Archivo {config_file} no válido o no encontrado. Generando default.")
             self.crear_configuracion_default()
-            with open(self.CONFIG_FILE, 'r') as file:
+            with open(self.get_resource_path(self.CONFIG_FILE), 'r') as file:
                 return yaml.safe_load(file)
     
     def crear_configuracion_default(self):
@@ -54,28 +65,31 @@ class Configuracion:
             "CO_MIN": 0,
             "CO_MAX": 100
         }
-        
-        with open(self.CONFIG_FILE, 'w') as file:
+
+        config_file = self.get_resource_path(self.CONFIG_FILE)
+        with open(config_file, 'w') as file:
             yaml.dump(config_default, file, default_flow_style=False)
-            logging.info(f"Configuración por defecto creada y guardada en {self.CONFIG_FILE}")
+            logging.info(f"Configuración por defecto creada y guardada en {config_file}")
     
     def guardar_configuracion(self, nueva_config):
         """Guarda los cambios de configuración en el archivo YAML."""
-        with open(self.CONFIG_FILE, 'w') as file:
+        config_file = self.get_resource_path(self.CONFIG_FILE)
+        with open(config_file, 'w') as file:
             yaml.dump(nueva_config, file, default_flow_style=False)
-            logging.info(f"Configuración actualizada y guardada en {self.CONFIG_FILE}")
+            logging.info(f"Configuración actualizada y guardada en {config_file}")
     
     def cargar_procesos(self):
+        process_file = self.get_resource_path(self.PROCESS_FILE)
         try:
-            with open(self.PROCESS_FILE, 'r') as file:
+            with open(process_file, 'r') as file:
                 process_params = yaml.safe_load(file)
                 if process_params is None:
                         raise ValueError("Archivo vacío")
-                logging.info(f"Configuración cargada desde {self.PROCESS_FILE}")
+                logging.info(f"Configuración cargada desde {process_file}")
         except (FileNotFoundError, yaml.YAMLError, ValueError):
-            logging.warning(f"Archivo {self.PROCESS_FILE} no válido o no encontrado. Generando default.")
+            logging.warning(f"Archivo {process_file} no válido o no encontrado. Generando default.")
             self.crear_procesos_default()
-            with open(self.PROCESS_FILE, 'r') as file:
+            with open(self.get_resource_path(self.PROCESS_FILE), 'r') as file:
                 process_params = yaml.safe_load(file)
 
         self.process_names = []
@@ -95,9 +109,10 @@ class Configuracion:
                 'co0': 50
             }
         }
-        with open(self.PROCESS_FILE, 'w') as file:
+        process_file = self.get_resource_path(self.PROCESS_FILE)
+        with open(process_file, 'w') as file:
             yaml.dump(process_default, file, default_flow_style=False)
-            logging.info(f"Configuración por defecto creada y guardada en {self.PROCESS_FILE}")
+            logging.info(f"Configuración por defecto creada y guardada en {process_file}")
 
 class GUI:
     def __init__(self, simulador):

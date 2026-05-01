@@ -66,6 +66,26 @@ pip install isort
 isort .
 ```
 
+### Building Windows Executable
+
+This project includes a PyInstaller spec file for building a Windows executable:
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+pip install pyinstaller
+
+# Build the executable
+pyinstaller simulador_controlador.spec --clean
+```
+
+Or use the build script on Windows:
+```bash
+build.bat
+```
+
+The executable will be created in the `dist` folder.
+
 ## Code Style Guidelines
 
 ### General
@@ -155,6 +175,10 @@ except (FileNotFoundError, yaml.YAMLError, ValueError):
 ├── config.yaml          # Runtime configuration
 ├── process.yaml         # Process parameters
 ├── requirements.txt     # Dependencies
+├── simulador_controlador.spec  # PyInstaller spec file
+├── build.bat            # Build script for Windows
+├── version_info.txt     # Windows version info
+├── control.ico         # Application icon
 └── README.md            # Documentation
 ```
 

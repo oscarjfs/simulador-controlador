@@ -5,6 +5,7 @@ config.json
 config.yml
 example.py
 test.py
+process.py
 
 pyAutoControl/
 .venv/

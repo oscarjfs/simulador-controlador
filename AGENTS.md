@@ -1,4 +1,4 @@
-# AGENTS.md - Development Guide for simualdor-controlador
+# AGENTS.md - Development Guide for simulador-controlador
 
 ## Project Overview
 
@@ -86,6 +86,28 @@ build.bat
 
 The executable will be created in the `dist` folder.
 
+## Project Structure
+
+```
+.
+├── main.py                      # Entry point
+├── simulador_controlador.py    # Main application class (GUI + simulation logic)
+├── process.py                  # Process models (heat exchangers: ShellAndTube, Water2Steam)
+├── config.yaml                 # Runtime configuration
+├── process.yaml                # Process parameters (FOPDT models)
+├── requirements.txt            # Dependencies
+├── pyproject.toml              # Project configuration (PEP 517/518)
+├── simulador_controlador.spec  # PyInstaller spec file
+├── build.bat                   # Build script for Windows
+├── version_info.txt            # Windows version info
+├── control.ico                 # Application icon
+├── pyAutoControl/              # Local PID controller module (fork from pyAutoControl)
+├── test.py                     # Manual test script
+├── example.py                  # Example usage script
+├── README.md                   # User documentation
+└── AGENTS.md                   # This file
+```
+
 ## Code Style Guidelines
 
 ### General
@@ -163,24 +185,6 @@ except (FileNotFoundError, yaml.YAMLError, ValueError):
 - Use numpy for array operations
 - Use scipy.integrate.solve_ivp for ODE solving
 - Use pandas DataFrame for data export to Excel
-
-### File Structure
-
-```
-.
-├── main.py              # Entry point
-├── simulador_controlador.py  # Main application class
-├── process.py           # Process models
-├── test.py              # Manual test script
-├── config.yaml          # Runtime configuration
-├── process.yaml         # Process parameters
-├── requirements.txt     # Dependencies
-├── simulador_controlador.spec  # PyInstaller spec file
-├── build.bat            # Build script for Windows
-├── version_info.txt     # Windows version info
-├── control.ico         # Application icon
-└── README.md            # Documentation
-```
 
 ### Best Practices
 

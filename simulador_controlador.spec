@@ -10,6 +10,7 @@ a = Analysis(
         ('config.yaml', '.'),
         ('process.yaml', '.'),
         ('control.ico', '.'),
+        ('pyAutoControl', 'pyAutoControl'),
     ],
     hiddenimports=[
         'yaml',
@@ -21,6 +22,8 @@ a = Analysis(
         'customtkinter',
         'tkinter',
         'PIL',
+        'pyAutoControl',
+        'pyAutoControl.PIDController',
     ],
     hookspath=[],
     hooksconfig={},

@@ -47,9 +47,9 @@ numpy>=2.4.2
 pandas>=3.0.0
 openpyxl>=3.1.5
 scipy>=1.17.0
-tk==0.1.0
+pyyaml>=6.0.3
+pyinstaller>=6.0.0
 pyAutoControl @ git+https://github.com/oscarjfs/pyAutoControl.git
-pyXSteam
 ```
 
 ## Instalación
@@ -96,13 +96,20 @@ python main.py
 
 ```
 .
-├── main.py                    # Punto de entrada de la aplicación
-├── simulador_controlador.py   # Clase principal del simulador y GUI
-├── process.py                 # Modelos de procesos (intercambiadores de calor)
-├── config.yaml                # Configuración runtime
-├── process.yaml               # Parámetros de procesos
-├── requirements.txt           # Dependencias del proyecto
-└── README.md                  # Este archivo
+├── main.py                      # Punto de entrada de la aplicación
+├── simulador_controlador.py     # Clase principal del simulador y GUI
+├── process.py                  # Modelos de procesos (intercambiadores de calor)
+├── config.yaml                 # Configuración runtime
+├── process.yaml                # Parámetros de procesos
+├── requirements.txt            # Dependencias del proyecto
+├── pyproject.toml              # Configuración del proyecto (PEP 517)
+├── simulador_controlador.spec  # Spec file para PyInstaller
+├── build.bat                   # Script de compilación para Windows
+├── version_info.txt            # Info de versión para Windows
+├── control.ico                 # Icono de la aplicación
+├── pyAutoControl/              # Módulo local de controlador PID
+├── README.md                   # Este archivo
+└── AGENTS.md                   # Guía para desarrolladores
 ```
 
 ## Licencia

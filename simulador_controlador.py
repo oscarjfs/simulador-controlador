@@ -1,5 +1,6 @@
 import yaml
 import logging
+from typing import Any
 import datetime
 import threading
 import queue
@@ -23,7 +24,7 @@ class Configuracion:
     PROCESS_FILE = 'process.yaml'
 
     @staticmethod
-    def get_resource_path(filename):
+    def get_resource_path(filename: str) -> str:
         if getattr(sys, 'frozen', False):
             base_path = os.path.dirname(sys.executable)
         else:
@@ -36,7 +37,8 @@ class Configuracion:
         self.process_params = self.cargar_procesos()
         logging.info("Configuración cargada exitosamente.")
         
-    def cargar_configuracion(self):
+    def cargar_configuracion(self) -> dict[str, Any]:
+        """Carga la configuración del simulador desde un archivo YAML"""
         config_file = self.get_resource_path(self.CONFIG_FILE)
         try:
             with open(config_file, 'r') as file:
@@ -51,7 +53,8 @@ class Configuracion:
             with open(self.get_resource_path(self.CONFIG_FILE), 'r') as file:
                 return yaml.safe_load(file)
     
-    def crear_configuracion_default(self):
+    def crear_configuracion_default(self) -> None:
+        """Crea un archivo de configuración con valores por defecto"""
         config_default = {
             "variance": 5e-09,
             "tVel": 20,
@@ -71,14 +74,15 @@ class Configuracion:
             yaml.dump(config_default, file, default_flow_style=False)
             logging.info(f"Configuración por defecto creada y guardada en {config_file}")
     
-    def guardar_configuracion(self, nueva_config):
+    def guardar_configuracion(self, nueva_config: dict[str, object]) -> None:
         """Guarda los cambios de configuración en el archivo YAML."""
         config_file = self.get_resource_path(self.CONFIG_FILE)
         with open(config_file, 'w') as file:
             yaml.dump(nueva_config, file, default_flow_style=False)
             logging.info(f"Configuración actualizada y guardada en {config_file}")
     
-    def cargar_procesos(self):
+    def cargar_procesos(self) -> dict[str, Any]:
+        """Carga los parámetros de los procesos"""
         process_file = self.get_resource_path(self.PROCESS_FILE)
         try:
             with open(process_file, 'r') as file:
@@ -98,7 +102,8 @@ class Configuracion:
 
         return process_params
 
-    def crear_procesos_default(self):
+    def crear_procesos_default(self) -> None:
+        """Crea y guarda un archivo de procesos con una configuración por defecto."""
         process_default = {
             'Personalizado':{
                 'Kp': 4.59,
@@ -120,15 +125,15 @@ class GUI:
         self.process_names = simulador.process_names
         self.crear_gui()
 
-    def crear_gui(self):
+    def crear_gui(self) -> None:
         """Crea la ventana principal de la interfaz gráfica y sus componentes."""
         logging.info("Creando la interfaz gráfica...")
         set_appearance_mode("System")
         set_default_color_theme("blue")
         
         self.ventana = CTk()
-        self.ventana.geometry("950x430")
-        self.ventana.minsize(950, 430)
+        self.ventana.geometry("1000x500")
+        self.ventana.minsize(1000, 500)
         self.ventana.title('Simulador de Lazos de Control by OF')
         self.ventana.protocol('WM_DELETE_WINDOW', self.simulador.finalizar_aplicacion)
         
@@ -137,7 +142,7 @@ class GUI:
         
         logging.info("Interfaz gráfica creada exitosamente.")
 
-    def crear_grafica_tendencia(self):
+    def crear_grafica_tendencia(self) -> None:
         """Crea y configura la figura y ejes para la gráfica de tendencia."""
         self.fig, self.ax = plt.subplots(facecolor='grey')
         plt.title("Gráfica de Tendencia", color='black', size=16)
@@ -177,7 +182,7 @@ class GUI:
         self.canvas.draw()
         self._blit_background = self.canvas.copy_from_bbox(self.fig.bbox)
 
-    def crear_comandos_gui(self):
+    def crear_comandos_gui(self) -> None:
         """Crea el frame para los comandos y la vista de pestañas."""
         self.frameComandos = CTkFrame(self.ventana)
         self.frameComandos.pack(side="right", fill='y')
@@ -206,7 +211,7 @@ class GUI:
         self.labelStatus = CTkLabel(self.frameComandos, text='')
         self.labelStatus.grid(column=0, row=24, columnspan=2)
 
-    def crear_tab_simulacion(self):
+    def crear_tab_simulacion(self) -> None:
         """Crea los elementos de la pestaña 'Simulación'."""
 
         CTkLabel(self.tabview.tab("Simulación"), text='PARÁMETROS DEL SISTEMA',
@@ -238,7 +243,7 @@ class GUI:
                                           variable=self.simularRuido, command=self.simulador.actualizar_estado_ruido)
         self.checkSimularRuido.grid(padx=10, pady=10, row=20, column=0, columnspan=2)
 
-    def crear_tab_controlador(self):
+    def crear_tab_controlador(self) -> None:
         """Crea los elementos de la pestaña 'Controlador'."""
         _, self.entradaSetPoint = self.crear_parametro_input(self.tabview.tab("Controlador"), 'Set point',
                                                         self.simulador.yspActual, 7, self.simulador.actualizar_sp)
@@ -261,16 +266,21 @@ class GUI:
         CTkButton(self.tabview.tab("Controlador"), text='Actualizar Ganancias', width=20, 
                  command=self.simulador.actualizar_ganancias).grid(padx=10, pady=10, row=15, column=0, columnspan=2)
         
+        self.estadoAntiwindup = BooleanVar(value=self.simulador.estadoAntiwindup)
+        self.checkEstadoAntiwindup = CTkSwitch(self.tabview.tab("Controlador"), text='Correción Anti-Wind Up',
+                                          variable=self.estadoAntiwindup, command=self.simulador.actualizar_estado_antiwindup)
+        self.checkEstadoAntiwindup.grid(padx=10, pady=10, row=16, column=0, columnspan=2)
+        
         self.controlAutomatico = BooleanVar(value=self.simulador.controlAutomaticoEncendido)
         self.checkControlAutomatico = CTkSwitch(self.tabview.tab("Controlador"), text='Control Automático Activo',
                                               variable=self.controlAutomatico, command=self.simulador.actualizar_estado_control)
-        self.checkControlAutomatico.grid(padx=10, pady=10, row=16, column=0, columnspan=2)
+        self.checkControlAutomatico.grid(padx=10, pady=10, row=17, column=0, columnspan=2)
         
         self.labelCO = CTkLabel(self.tabview.tab("Controlador"), text='CO: ')
         self.entradaCO = CTkEntry(self.tabview.tab("Controlador"), width=100)
         self.entradaCO.bind('<Return>', self.simulador.actualizar_co)
 
-    def crear_tab_exportado(self):
+    def crear_tab_exportado(self) -> None:
         """Crea los elementos de la pestaña 'Exportado'."""
         CTkButton(self.tabview.tab("Exportado"), text='Exportar', width=20,
                  command=self.simulador.exportar_datos).grid(column=0, row=4, padx=5, pady=5, columnspan=2)
@@ -279,12 +289,12 @@ class GUI:
         CTkLabel(self.tabview.tab("Exportado"), text="Formato de exportado:").grid(row=0, column=0, columnspan=1, padx=10, pady=10, sticky="")
         
         CTkRadioButton(self.tabview.tab("Exportado"), variable=self.formatoExportado, 
-                      value='xlsx', text='xlsx').grid(row=2, column=0, pady=10, padx=20)
+                      value='xlsx', text='xlsx').grid(row=2, column=0, pady=10, padx=10)
         
         CTkRadioButton(self.tabview.tab("Exportado"), variable=self.formatoExportado, 
-                      value='csv', text='csv').grid(row=2, column=1, pady=10, padx=20)
+                      value='csv', text='csv').grid(row=2, column=1, pady=10, padx=10)
 
-    def crear_parametro_input(self, parent, label, def_value, row, command):
+    def crear_parametro_input(self, parent, label, def_value, row, command) -> tuple[CTkLabel, CTkEntry]:
         """Crea un par de Label y Entry para un parámetro de entrada."""
         etiqueta = CTkLabel(parent, text=f'{label}: ')
         etiqueta.grid(pady=5, row=row, column=0)
@@ -294,7 +304,7 @@ class GUI:
         entrada.bind('<Return>', command)
         return etiqueta, entrada
     
-    def actualizar_grafica(self, t, y, ysp, co, tActual, tminGrafica, nDatosGrafica):
+    def actualizar_grafica(self, t, y, ysp, co, tActual, tminGrafica) -> None:
         """Actualiza la gráfica de tendencia con los nuevos valores usando blitting."""
         with self.simulador.data_lock:
             t_arr = np.asarray(t)
@@ -374,7 +384,7 @@ class SimuladorControlador:
         self.gui = GUI(self)
         logging.info("SimuladorControlador inicializado exitosamente.")
     
-    def inicializar_parametros(self):
+    def inicializar_parametros(self) -> None:
         """Inicializa los parámetros de simulación a partir de la configuración cargada."""
         logging.info("Inicializando parámetros de simulación...")
         try:
@@ -391,7 +401,7 @@ class SimuladorControlador:
             logging.error(f"Error al inicializar parámetros de la simulación: Falta la clave {e} en el archivo de configuración.")
             showerror("Error", f"Error al inicializar parámetros de la simulación: Falta la clave {e} en el archivo de configuración.")
     
-    def inicializar_parametros_controlador(self):
+    def inicializar_parametros_controlador(self) -> None:
         """Inicializa los parámetros del controlador a partir de la configuración cargada."""
         logging.info("Inicializando parámetros del controlador...")
         try:
@@ -401,14 +411,15 @@ class SimuladorControlador:
             self.cambiosParametros = False
             self.CO_MIN = self.configuracion['CO_MIN']
             self.CO_MAX = self.configuracion['CO_MAX']
-            self.controller = PIDController(self.Ts, self.Kc, self.Ki, self.Kd, self.CO_MIN, self.CO_MAX)
+            self.estadoAntiwindup = True
+            self.controller = PIDController(self.Ts, self.Kc, self.Ki, self.Kd, self.CO_MIN, self.CO_MAX, self.estadoAntiwindup)
             self.controller.set_controller_status(self.controlAutomaticoEncendido)
             logging.info("Parámetros del controlador inicializados exitosamente.")
         except KeyError as e:
             logging.error(f"Error al inicializar parámetros del controlador: Falta la clave {e} en el archivo de configuración.")
             showerror("Error", f"Error al inicializar parámetros del controlador: Falta la clave {e} en el archivo de configuración.")
 
-    def inicializar_estado_simulacion(self):
+    def inicializar_estado_simulacion(self) -> None:
         """Inicializa las variables de estado de la simulación."""
         logging.info("Inicializando variables de estado de simulación...")
         try:
@@ -434,14 +445,14 @@ class SimuladorControlador:
             logging.error(f"Error al inicializar variables de estado: Falta la clave {e} en el archivo de configuración.")
             showerror("Error", f"Error al inicializar variables de estado: Falta la clave {e} en el archivo de configuración.")
 
-    def reestablecer_entradas_proceso_gui(self):
+    def reestablecer_entradas_proceso_gui(self) -> None:
         """Reestablece los textos en los campos de entrada del proceso"""
         self.gui.entradaSetPoint.delete(0, "end")
         self.gui.entradaSetPoint.insert(0, str(self.yspActual))
         self.gui.entradaCO.delete(0, "end")
         self.gui.entradaCO.insert(0, str(self.co0))
 
-    def reestablecer_caracteristicas_proceso_gui(self):
+    def reestablecer_caracteristicas_proceso_gui(self) -> None:
         """Reestablece los textos en los campos de entrada de las caracteristicas proceso"""
         self.gui.entradaKp.delete(0, "end")
         self.gui.entradaKp.insert(0, str(self.Kp))
@@ -450,7 +461,7 @@ class SimuladorControlador:
         self.gui.entradaTd.delete(0, "end")
         self.gui.entradaTd.insert(0, str(self.td))
 
-    def cambiar_sistema_simulado(self, event=None):
+    def cambiar_sistema_simulado(self, event=None) -> None:
         """Cambia el sistema seleccionado y actualiza los campos de entrada necesarios"""
         self.sistemaSeleccionado = self.gui.sistemaSeleccionado.get()
         self.inicializar_parametros()
@@ -480,7 +491,8 @@ class SimuladorControlador:
             self.gui.entradaTaup.grid_remove()
             self.gui.entradaTd.grid_remove()
     
-    def _actualizar_parametro_gui(self, entrada_gui, nombre_parametro, tipo_dato, callback_actualizar, event=None):
+    #  TODO Pendiente adicionar el typing
+    def _actualizar_parametro_gui(self, entrada_gui, nombre_parametro, tipo_dato, callback_actualizar, event=None)  -> None:
         """Función auxiliar para validar y actualizar parámetros desde entradas de la GUI."""
         try:
             valor = tipo_dato(entrada_gui.get())
@@ -501,15 +513,15 @@ class SimuladorControlador:
                  entrada_gui.insert(0, str(self.coActual))
             # Para ganancias (Kc, Ki, Kd) se maneja en actualizar_ganancias
 
-    def actualizar_kp(self, event=None):
+    def actualizar_kp(self, event=None) -> None:
         """Actualiza el valor de Kp basado en la entrada del usuario."""
         self._actualizar_parametro_gui(self.gui.entradaKp, 'Kp', float, lambda val: setattr(self, 'Kp', val), event)
 
-    def actualizar_taup(self, event=None):
+    def actualizar_taup(self, event=None) -> None:
         """Actualiza el valor de Taup basado en la entrada del usuario."""
         self._actualizar_parametro_gui(self.gui.entradaTaup, 'Tau', float, lambda val: setattr(self, 'taup', val), event)
 
-    def actualizar_td(self, event=None):
+    def actualizar_td(self, event=None) -> None:
         """Actualiza el valor de Td y redimensiona los buffers de memoria si es necesario."""
         try:
             nuevo_td = float(self.gui.entradaTd.get())
@@ -533,7 +545,7 @@ class SimuladorControlador:
             self.gui.entradaTd.delete(0, "end")
             self.gui.entradaTd.insert(0, str(self.td))
 
-    def actualizar_sp(self, event=None):
+    def actualizar_sp(self, event=None) -> None:
         """Actualiza el valor del set point (ysp) basado en la entrada del usuario."""
         try:
             self.yspActual = float(self.gui.entradaSetPoint.get())
@@ -545,7 +557,7 @@ class SimuladorControlador:
             self.gui.entradaSetPoint.delete(0, "end")
             self.gui.entradaSetPoint.insert(0, str(self.yspActual))
 
-    def actualizar_ganancias(self, event=None):
+    def actualizar_ganancias(self, event=None) -> None:
         """Actualiza las ganancias del controlador (Kc, Ki, Kd) basado en la entrada del usuario."""
         try:
             self.Kc = float(self.gui.entradaKc.get())
@@ -562,7 +574,7 @@ class SimuladorControlador:
             self.gui.entradaKd.delete(0, "end")
             self.gui.entradaKd.insert(0, str(self.Kd))
 
-    def actualizar_estado_control(self):
+    def actualizar_estado_control(self) -> None:
         """Actualiza el estado del control automático (encendido/apagado)."""
         self.controlAutomaticoEncendido = self.gui.controlAutomatico.get()
         self.controller.set_controller_status(self.controlAutomaticoEncendido)
@@ -571,13 +583,13 @@ class SimuladorControlador:
             self.gui.labelCO.grid_forget()
             self.gui.entradaCO.grid_forget()
         else:
-            self.gui.labelCO.grid(pady=5, row=17, column=0)
-            self.gui.entradaCO.grid(padx=5, row=17, column=1)
+            self.gui.labelCO.grid(pady=5, row=18, column=0)
+            self.gui.entradaCO.grid(padx=5, row=18, column=1)
             self.gui.entradaCO.delete(0, "end")
             self.coActual = self.co[-1]
             self.gui.entradaCO.insert(0, str(round(self.coActual, 1)))
 
-    def actualizar_co(self, event=None):
+    def actualizar_co(self, event=None) -> None:
         """Actualiza el valor de CO (Control Output) basado en la entrada del usuario."""
         try:
             self.coActual = float(self.gui.entradaCO.get())
@@ -589,7 +601,7 @@ class SimuladorControlador:
             self.gui.entradaCO.delete(0, "end")
             self.gui.entradaCO.insert(0, str(self.coActual))
 
-    def actualizar_velocidad(self, event=None):
+    def actualizar_velocidad(self, event=None) -> None:
         """Actualiza la velocidad de simulación basada en el valor del slider."""
         nuevaVelocidad = round(self.gui.scaleVelocidad.get(), -1)
         if nuevaVelocidad < 1:
@@ -599,11 +611,15 @@ class SimuladorControlador:
             self.gui.scaleVelocidad.set(nuevaVelocidad)
             self.tVel = int(nuevaVelocidad)
 
-    def actualizar_estado_ruido(self):
+    def actualizar_estado_ruido(self) -> None:
         """Actualiza el estado de la simulación de ruido (encendido/apagado)."""
         self.ruidoSenalEncendido = self.gui.simularRuido.get()
+
+    def actualizar_estado_antiwindup(self) -> None:
+        """Actualizar el estaod del corrector anti-windip"""
+        self.estadoAntiwindup = self.gui.estadoAntiwindup.get()
     
-    def iniciar_simulacion(self):
+    def iniciar_simulacion(self) -> None:
         """Inicia la simulación del sistema."""
         logging.info("Iniciando simulación...")
         self.estadoSimulacion = True
@@ -633,7 +649,7 @@ class SimuladorControlador:
             logging.error(f"Error al iniciar la simulación: Ingrese un valor numérico válido para Kp, Tau y td. {e}")
             showerror("Error", "Ingrese un valor numérico válido para Kp, Tau y td.")
     
-    def detener_simulacion(self):
+    def detener_simulacion(self) -> None:
         logging.info("Deteniendo simulación...")
         self.estadoSimulacion = False
         if self.sim_thread is not None:
@@ -645,7 +661,7 @@ class SimuladorControlador:
         self.gui.boton_iniciar.configure(text='Iniciar', command=self.iniciar_simulacion, fg_color='green')
         logging.info("Simulación detenida exitosamente.")
     
-    def reiniciar_simulacion(self):
+    def reiniciar_simulacion(self) -> None:
         """Reestablece la simulación a las configuraciones de incio"""
         if askyesno(message='¿Desea reiniciar la simulación?', title='Simulador de Lazos de Control by OF'):
             logging.info("Reiniciando simulación...")
@@ -653,23 +669,23 @@ class SimuladorControlador:
             self.inicializar_estado_simulacion()
             self.reestablecer_entradas_proceso_gui()
             self.controller.restart_controller()
-            self.gui.actualizar_grafica(self.t, self.y, self.ysp, self.co, self.tActual, self.tminGrafica, self.nDatosGrafica)
+            self.gui.actualizar_grafica(self.t, self.y, self.ysp, self.co, self.tActual, self.tminGrafica)
             logging.info("Simulación reiniciada exitosamente.")
     
-    def fopdt(self, t, y, co):
+    def fopdt(self, t: float, y: float, co: float) -> float:
         """Define la ecuación diferencial del modelo FOPDT."""
         u = 0 if t < self.td + self.tstep else 1
         dydt = -(y - self.y0) / self.taup + self.Kp / self.taup * u * (co - self.co0)
         return dydt
     
-    def fopdt_euler(self, y_prev, co):
+    def fopdt_euler(self, y_prev: float, co: float) -> float:
         """Resuelve un paso del modelo FOPDT usando la solución analítica exacta."""
         u = 0 if self.tActual < self.td + self.tstep else 1
         y_eq = self.y0 + self.Kp * u * (co - self.co0)
         y_next = y_eq + (y_prev - y_eq) * np.exp(-self.Ts / self.taup)
         return y_next
     
-    def simulacion_pid(self):
+    def simulacion_pid(self) -> None:
         """Ejecuta un lote de pasos de simulación y envía datos a la queue."""
         try:
             for i in range(self.tVel):
@@ -696,7 +712,7 @@ class SimuladorControlador:
             self.estadoSimulacion = False
             self.data_queue.put(('error', str(e)))
 
-    def _simulacion_loop(self):
+    def _simulacion_loop(self) -> None:
         """Loop de simulación que se ejecuta en un hilo separado."""
         while self.estadoSimulacion:
             t_start = datetime.datetime.now()
@@ -705,7 +721,7 @@ class SimuladorControlador:
             sleep_time = max(0.05, 0.1 - elapsed)
             threading.Event().wait(sleep_time)
 
-    def _programar_consumo_datos(self):
+    def _programar_consumo_datos(self) -> None:
         """Programa la verificación periódica de datos desde la queue en el hilo GUI."""
         if not self.estadoSimulacion:
             return
@@ -728,13 +744,13 @@ class SimuladorControlador:
 
         self.gui.ventana.after(50, self._programar_consumo_datos)
 
-    def _consumir_y_actualizar(self):
+    def _consumir_y_actualizar(self) -> None:
         """Actualiza la gráfica con los datos actuales (se ejecuta en el hilo GUI)."""
         self._gui_update_pending = False
         if self.estadoSimulacion:
-            self.gui.actualizar_grafica(self.t, self.y, self.ysp, self.co, self.tActual, self.tminGrafica, self.nDatosGrafica)
+            self.gui.actualizar_grafica(self.t, self.y, self.ysp, self.co, self.tActual, self.tminGrafica)
     
-    def exportar_datos(self):
+    def exportar_datos(self) -> None:
         """Exporta los datos de la simulación a un archivo csv o xlsx"""
         ahora = datetime.datetime.now()
         nombreArchivo = ahora.strftime("data_%Y-%m-%d_%H_%M_%S")
@@ -757,14 +773,31 @@ class SimuladorControlador:
         self.gui.labelStatus.configure(text=f'Exportado {ahora}')
         logging.info(f"Datos exportados a {nombreArchivo}.{formato}")
     
-    def finalizar_aplicacion(self):
+    def finalizar_aplicacion(self) -> None:
         """Finaliza la aplicación preguntando al usuario."""
         logging.info("Finalizando aplicación...")
         if askyesno(message='¿Desea salir del simulador?', title='Simulador de Lazos de Control by OF'):
             self.estadoSimulacion = False
+
+            new_config = {
+                "variance": self.variance,
+                "tVel": self.tVel,
+                "ruidoSenalEncendido": True,
+                "Ts": self.Ts,
+                "controlAutomaticoEncendido": True,
+                "tminGrafica": self.tminGrafica,
+                "Kc": self.Kc,
+                "Ki": self.Ki,
+                "Kd": self.Kd,
+                "CO_MIN": self.CO_MIN,
+                "CO_MAX": self.CO_MAX
+            }
+            if self.cambiosParametros:
+                self.configuracion_manager.guardar_configuracion(new_config)
+
             self.gui.ventana.quit()
             logging.info("Aplicación finalizada exitosamente.")
     
-    def ejecutar(self):
+    def ejecutar(self) -> None:
         """Inicia el loop principal de la interfaz gráfica."""
         self.gui.ejecutar()

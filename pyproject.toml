@@ -1,7 +1,7 @@
 [project]
 name = "simulador-controlador"
 version = "0.1.0"
-description = "Add your description here"
+description = "Simulador de lazos de control PID con GUI"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -12,5 +12,6 @@ dependencies = [
     "pandas>=3.0.0",
     "pyyaml>=6.0.3",
     "scipy>=1.17.0",
-    "tk==0.1.0",
+    "pyinstaller>=6.0.0",
+    "pyAutoControl @ git+https://github.com/oscarjfs/pyAutoControl.git",
 ]

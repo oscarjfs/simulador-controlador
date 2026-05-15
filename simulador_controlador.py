@@ -672,17 +672,24 @@ class SimuladorControlador:
             self.gui.actualizar_grafica(self.t, self.y, self.ysp, self.co, self.tActual, self.tminGrafica)
             logging.info("Simulación reiniciada exitosamente.")
     
-    def fopdt(self, t: float, y: float, co: float) -> float:
+    def fopdt(self, t: float, y_prev: float, co: float) -> float:
         """Define la ecuación diferencial del modelo FOPDT."""
         u = 0 if t < self.td + self.tstep else 1
-        dydt = -(y - self.y0) / self.taup + self.Kp / self.taup * u * (co - self.co0)
+        dydt = -(y_prev - self.y0) / self.taup + self.Kp / self.taup * u * (co - self.co0)
         return dydt
     
-    def fopdt_euler(self, y_prev: float, co: float) -> float:
+    def fopdt_euler(self, t: float, y_prev: float, co: float) -> float:
         """Resuelve un paso del modelo FOPDT usando la solución analítica exacta."""
-        u = 0 if self.tActual < self.td + self.tstep else 1
+        u = 0 if t < self.td + self.tstep else 1
         y_eq = self.y0 + self.Kp * u * (co - self.co0)
         y_next = y_eq + (y_prev - y_eq) * np.exp(-self.Ts / self.taup)
+        return y_next
+
+    def solve_system(self, t: float, y_prev: float, co: float) -> float:
+        """Resuelve la ecuación representativa del sistema y entrega la predicción de la respuesta."""
+
+        y_next = self.fopdt_euler(t, y_prev, co)
+
         return y_next
     
     def simulacion_pid(self) -> None:
@@ -700,7 +707,7 @@ class SimuladorControlador:
                         offset = int(self.td / self.Ts)
                         coAtrasado = self.co[-offset] if len(self.co) > offset else self.co0
                     
-                    y_next = self.fopdt_euler(self.y[-1], coAtrasado)
+                    y_next = self.solve_system(self.tActual, self.y[-1], coAtrasado)
                     y_next *= np.random.normal(1, np.sqrt(self.variance * self.ruidoSenalEncendido))
                     self.y.append(y_next)
                     
